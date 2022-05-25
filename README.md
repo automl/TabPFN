@@ -1,2 +1,1 @@
-# TabPFN
-TabPFN
+# prior-fitting
