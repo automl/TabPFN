@@ -3,7 +3,6 @@
 ## Installation
 ```
 conda create -n TabPFN python=3.7
-conda config --add channels conda-forge
 pip install -r requirements.txt
 ```
 
