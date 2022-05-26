@@ -12,7 +12,6 @@ from torch import nn
 
 import utils
 from transformer import TransformerModel
-from bar_distribution import BarDistribution, FullSupportBarDistribution, get_bucket_limits
 from utils import get_cosine_schedule_with_warmup, get_openai_lr, StoreDictKeyPair, get_weighted_single_eval_pos_sampler, get_uniform_single_eval_pos_sampler
 import priors
 import encoders
@@ -25,7 +24,6 @@ class Losses():
     mse = nn.MSELoss(reduction='none')
     ce = lambda weight : nn.CrossEntropyLoss(reduction='none', weight=weight)
     bce = nn.BCEWithLogitsLoss(reduction='none')
-    get_BarDistribution = BarDistribution
 
 
 def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=200, nlayers=6, nhead=2, dropout=0.2,
@@ -52,9 +50,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     n_out = dl.num_outputs
     if isinstance(criterion, nn.GaussianNLLLoss):
         n_out *= 2
-    elif isinstance(criterion, BarDistribution) or "BarDistribution" in criterion.__class__.__name__: # TODO remove this fix (only for dev)
-        assert n_out == 1
-        n_out = criterion.num_bars
     elif isinstance(criterion, nn.CrossEntropyLoss):
         n_out *= criterion.weight.shape[0]
     model = TransformerModel(encoder, n_out, emsize, nhead, nhid, nlayers, dropout, style_encoder=style_encoder,

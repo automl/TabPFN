@@ -1,7 +1,5 @@
-# Recommend to use python >= 3.9
-botorch==0.5.0
+# Please use python V 3.7 to be compatible with all packages
 gpytorch==1.5.0
-pyro-ppl==1.7.0
 torch==1.9.0
 scikit-learn==0.24.2
 pyyaml==5.4.1
@@ -11,7 +9,7 @@ tqdm==4.62.1
 numpy==1.21.2
 openml==0.12.2
 catboost==0.26.1
-autosklearn==0.14.5
-autogluon==0.4.0
+auto-sklearn==0.14.5
 hyperopt==0.2.5
-ConfigSpace==0.4.21
+configspace==0.4.21
+# autogluon==0.4.0

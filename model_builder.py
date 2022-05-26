@@ -8,7 +8,6 @@ from priors.utils import trunc_norm_sampler_f, gamma_sampler_f
 from utils import get_uniform_single_eval_pos_sampler
 import torch
 import math
-from bar_distribution import BarDistribution, FullSupportBarDistribution, get_bucket_limits
 
 def save_model(model, path, filename, config_sample):
     config_sample = {**config_sample}

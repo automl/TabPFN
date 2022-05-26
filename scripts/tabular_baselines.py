@@ -113,7 +113,7 @@ def preprocess_impute(x, y, test_x, test_y, impute, one_hot, standardize, cat_fe
 
 ## Auto Gluon
 def autogluon_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
-    from autogluon.tabular import TabularPredictor
+    from autogluon.tabular import TabularPredictor # Inside function so package can be sued without installation
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
                                              , cat_features=cat_features
