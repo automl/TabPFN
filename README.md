@@ -3,7 +3,7 @@
 ## Installation
 ```
 conda create -n TabPFN python=3.7
-pip install -r requirements.txt
+$environment_path$/pip install -r requirements.txt
 ```
 
 To run the autogluon baseline please create a separate environment and install autogluon==0.4.0, installation in the same environment as our other baselines is not possible.
