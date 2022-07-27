@@ -6,9 +6,133 @@ from torch.utils.checkpoint import checkpoint
 from utils import normalize_data, to_ranking_low_mem, remove_outliers
 from priors.utils import normalize_by_used_features_f
 from utils import NOP
-import numpy as np
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
+
+from notebook_utils import CustomUnpickler
+
+import numpy as np
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.multiclass import unique_labels
+from pathlib import Path
+from model_builder import load_model
+import os
+
+def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition=''):
+    """
+    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
+
+    :param i:
+    :param e:
+    :param eval_positions_valid:
+    :param add_name:
+    :param base_path:
+    :param device:
+    :param eval_addition:
+    :return:
+    """
+    def check_file(e):
+        model_file = f'models_diff/prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{e}.cpkt'
+        model_path = os.path.join(base_path, model_file)
+        # print('Evaluate ', model_path)
+        results_file = os.path.join(base_path,
+                                    f'models_diff/prior_diff_real_results{add_name}_n_{i}_epoch_{e}_{eval_addition}.pkl')
+        if not Path(model_path).is_file():  # or Path(results_file).is_file():
+            return None, None, None
+        return model_file, model_path, results_file
+
+    model_file = None
+    if e == -1:
+        for e_ in range(100, -1, -1):
+            model_file_, model_path_, results_file_ = check_file(e_)
+            if model_file_ is not None:
+                e = e_
+                model_file, model_path, results_file = model_file_, model_path_, results_file_
+                break
+    else:
+        model_file, model_path, results_file = check_file(e)
+
+    if model_file is None:
+        print('No checkpoint found')
+        return None
+
+    print(f'Loading {model_file}')
+
+    model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
+
+    return model, c, results_file
+
+class TabPFNClassifier(BaseEstimator, ClassifierMixin):
+
+    def __init__(self, device='cpu', base_path='.'):
+        # Model file specification (Model name, Epoch)
+        model_string = ''
+        i, e = '8x_lr0.0003', -1
+
+        # File which contains result of hyperparameter tuning run: style (i.e. hyperparameters) and a dataframe with results.
+        style_file = 'prior_tuning_result.pkl'
+
+        model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
+                                                     eval_addition='')
+        style, temperature = self.load_result_minimal(style_file, i, e)
+
+        self.device = device
+        self.model = model
+        self.c = c
+        self.style = style
+        self.temperature = temperature
+
+        self.max_num_features = self.c['num_features']
+        self.max_num_classes = self.c['max_num_classes']
+
+    def load_result_minimal(self, path, i, e):
+        with open(path, 'rb') as output:
+            _, _, _, style, temperature, optimization_route = CustomUnpickler(output).load()
+
+            return style, temperature
+
+    def fit(self, X, y):
+        # Check that X and y have correct shape
+        X, y = check_X_y(X, y)
+        # Store the classes seen during fit
+        self.classes_ = unique_labels(y)
+
+        self.X_ = X
+        self.y_ = y
+
+        if X.shape[1] > self.max_num_features:
+            raise ValueError("The number of features for this classifier is restricted to ", self.max_num_features)
+        if len(np.unique(y)) > self.max_num_classes:
+            raise ValueError("The number of classes for this classifier is restricted to ", self.max_num_classes)
+
+        # Return the classifier
+        return self
+
+    def predict(self, X):
+        # Check is fit had been called
+        check_is_fitted(self)
+
+        # Input validation
+        X = check_array(X)
+
+        X_full = np.concatenate([self.X_, X], axis=0)
+        X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
+        y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
+        y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
+
+        eval_pos = self.X_.shape[0]
+
+        prediction = transformer_predict(self.model[2], X_full, y_full, eval_pos,
+                                         device=self.device,
+                                         style=self.style,
+                                         inference_mode=True,
+                                         N_ensemble_configurations=10,
+                                         softmax_temperature=self.temperature
+                                         , **get_params_from_config(self.c))
+        prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
+
+        return prediction_.detach().cpu().numpy()
 
 def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         device='cpu',
