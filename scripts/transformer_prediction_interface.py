@@ -14,7 +14,8 @@ from notebook_utils import CustomUnpickler
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
-from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.multiclass import check_classification_targets
+from sklearn.utils import column_or_1d
 from pathlib import Path
 from model_builder import load_model
 import os
@@ -63,6 +64,7 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
     return model, c, results_file
 
+
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path='.'):
@@ -75,9 +77,10 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
                                                      eval_addition='')
-        style, temperature = self.load_result_minimal(style_file, i, e)
+        style, temperature = self.load_result_minimal(style_file, i, e, base_path=base_path)
 
         self.device = device
+        self.base_path = base_path
         self.model = model
         self.c = c
         self.style = style
@@ -86,8 +89,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.max_num_features = self.c['num_features']
         self.max_num_classes = self.c['max_num_classes']
 
-    def load_result_minimal(self, path, i, e):
-        with open(path, 'rb') as output:
+    def load_result_minimal(self, path, i, e, base_path='.'):
+        with open(os.path.join(base_path,path), 'rb') as output:
             _, _, _, style, temperature, optimization_route = CustomUnpickler(output).load()
 
             return style, temperature
@@ -95,8 +98,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def fit(self, X, y):
         # Check that X and y have correct shape
         X, y = check_X_y(X, y)
-        # Store the classes seen during fit
-        self.classes_ = unique_labels(y)
+        y = self._validate_targets(y)
 
         self.X_ = X
         self.y_ = y
@@ -109,7 +111,21 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         # Return the classifier
         return self
 
-    def predict(self, X):
+    def _validate_targets(self, y):
+        y_ = column_or_1d(y, warn=True)
+        check_classification_targets(y)
+        cls, y = np.unique(y_, return_inverse=True)
+        if len(cls) < 2:
+            raise ValueError(
+                "The number of classes has to be greater than one; got %d class"
+                % len(cls)
+            )
+
+        self.classes_ = cls
+
+        return np.asarray(y, dtype=np.float64, order="C")
+
+    def predict_proba(self, X):
         # Check is fit had been called
         check_is_fitted(self)
 
@@ -118,7 +134,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         X_full = np.concatenate([self.X_, X], axis=0)
         X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
-        y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
+        y_full = np.concatenate([self.y_, self.y_[0] + np.zeros_like(X[:, 0])], axis=0)
         y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
 
         eval_pos = self.X_.shape[0]
@@ -130,9 +146,17 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          N_ensemble_configurations=10,
                                          softmax_temperature=self.temperature
                                          , **get_params_from_config(self.c))
-        prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
+        prediction_ = prediction.squeeze(0)
 
         return prediction_.detach().cpu().numpy()
+
+    def predict(self, X, return_winning_probability=False):
+        p = self.predict_proba(X)
+        y = np.argmax(self.predict_proba(X), axis=-1)
+        y = self.classes_.take(np.asarray(y, dtype=np.intp))
+        if return_winning_probability:
+            return y, p.max(axis=-1)
+        return y
 
 def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         device='cpu',
@@ -154,7 +178,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
     :param model:
     :param eval_xs:
-    :param eval_ys:
+    :param eval_ys: should be classes that are 0-indexed and every class until num_classes-1 is present
     :param eval_position:
     :param rescale_features:
     :param device:
