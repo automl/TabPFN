@@ -97,7 +97,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y):
         # Check that X and y have correct shape
-        X, y = check_X_y(X, y)
         y = self._validate_targets(y)
 
         self.X_ = X
@@ -128,9 +127,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         # Check is fit had been called
         check_is_fitted(self)
-
-        # Input validation
-        X = check_array(X)
 
         X_full = np.concatenate([self.X_, X], axis=0)
         X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
