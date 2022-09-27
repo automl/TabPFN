@@ -15,7 +15,7 @@ class TransformerModel(nn.Module):
     def __init__(self, encoder, n_out, ninp, nhead, nhid, nlayers, dropout=0.0, style_encoder=None, y_encoder=None,
                  pos_encoder=None, decoder=None, input_normalization=False, init_method=None, pre_norm=False,
                  activation='gelu', recompute_attn=False, num_global_att_tokens=0, full_attention=False,
-                 all_layers_same_init=True):
+                 all_layers_same_init=False, efficient_eval_masking=True):
         super().__init__()
         self.model_type = 'Transformer'
         encoder_layer_creator = lambda: TransformerEncoderLayer(ninp, nhead, nhid, dropout, activation=activation,
@@ -34,11 +34,16 @@ class TransformerModel(nn.Module):
             assert not full_attention
         self.global_att_embeddings = nn.Embedding(num_global_att_tokens, ninp) if num_global_att_tokens else None
         self.full_attention = full_attention
+        self.efficient_eval_masking = efficient_eval_masking
 
         self.n_out = n_out
         self.nhid = nhid
 
         self.init_weights()
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self.__dict__.setdefault('efficient_eval_masking', False)
 
     @staticmethod
     def generate_square_subsequent_mask(sz):
@@ -93,35 +98,37 @@ class TransformerModel(nn.Module):
                 nn.init.zeros_(attn.out_proj.bias)
 
     def forward(self, src, src_mask=None, single_eval_pos=None):
-        assert isinstance(src, tuple), 'fuse_x_y is forbidden, that is inputs have to be given as (x,y) or (style,x,y)'
+        assert isinstance(src, tuple), 'inputs (src) have to be given as (x,y) or (style,x,y) tuple'
 
-        if len(src) == 2:
+        if len(src) == 2: # (x,y) and no style
             src = (None,) + src
-
-        style_src, style_src_size = (src[0], (0 if (src[0] is None) else 1))
-        if src_mask is not None: assert self.global_att_embeddings is None or isinstance(src_mask, tuple)
-        if src_mask is None:
-            x_src = src[1]
-            if self.global_att_embeddings is None:
-                full_len = len(x_src) + style_src_size
-                if self.full_attention:
-                    src_mask = bool_mask_to_att_mask(torch.ones((full_len, full_len), dtype=torch.bool)).to(x_src.device)
-                else:
-                    src_mask = self.generate_D_q_matrix(len(x_src) + style_src_size, len(x_src) + style_src_size -single_eval_pos).to(x_src.device)
-            else:
-                src_mask_args = (self.global_att_embeddings.num_embeddings,
-                                 len(x_src) + style_src_size,
-                                 len(x_src) + style_src_size - single_eval_pos)
-                src_mask = (self.generate_global_att_globaltokens_matrix(*src_mask_args).to(x_src.device),
-                            self.generate_global_att_trainset_matrix(*src_mask_args).to(x_src.device),
-                            self.generate_global_att_query_matrix(*src_mask_args).to(x_src.device))
 
         style_src, x_src, y_src = src
         x_src = self.encoder(x_src)
         y_src = self.y_encoder(y_src.unsqueeze(-1) if len(y_src.shape) < len(x_src.shape) else y_src)
-        style_src = self.style_encoder(style_src).unsqueeze(0) if self.style_encoder else torch.tensor([], device=x_src.device)
+        style_src = self.style_encoder(style_src).unsqueeze(0) if self.style_encoder else \
+            torch.tensor([], device=x_src.device)
         global_src = torch.tensor([], device=x_src.device) if self.global_att_embeddings is None else \
             self.global_att_embeddings.weight.unsqueeze(1).repeat(1, x_src.shape[1], 1)
+
+        if src_mask is not None: assert self.global_att_embeddings is None or isinstance(src_mask, tuple)
+        if src_mask is None:
+            if self.global_att_embeddings is None:
+                full_len = len(x_src) + len(style_src)
+                if self.full_attention:
+                    src_mask = bool_mask_to_att_mask(torch.ones((full_len, full_len), dtype=torch.bool)).to(x_src.device)
+                elif self.efficient_eval_masking:
+                    src_mask = single_eval_pos + len(style_src)
+                else:
+                    src_mask = self.generate_D_q_matrix(full_len, len(x_src) - single_eval_pos).to(x_src.device)
+            else:
+                src_mask_args = (self.global_att_embeddings.num_embeddings,
+                                 len(x_src) + len(style_src),
+                                 len(x_src) + len(style_src) - single_eval_pos)
+                src_mask = (self.generate_global_att_globaltokens_matrix(*src_mask_args).to(x_src.device),
+                            self.generate_global_att_trainset_matrix(*src_mask_args).to(x_src.device),
+                            self.generate_global_att_query_matrix(*src_mask_args).to(x_src.device))
+
         train_x = x_src[:single_eval_pos] + y_src[:single_eval_pos]
         src = torch.cat([global_src, style_src, train_x, x_src[single_eval_pos:]], 0)
 
@@ -131,10 +138,9 @@ class TransformerModel(nn.Module):
         if self.pos_encoder is not None:
             src = self.pos_encoder(src)
 
-        # If we have style input, drop its output
-        output = self.transformer_encoder(src, src_mask)[style_src_size:]
+        output = self.transformer_encoder(src, src_mask)
         output = self.decoder(output)
-        return output[single_eval_pos+(self.global_att_embeddings.num_embeddings if self.global_att_embeddings else 0):]
+        return output[single_eval_pos+len(style_src)+(self.global_att_embeddings.num_embeddings if self.global_att_embeddings else 0):]
 
     @torch.no_grad()
     def init_from_small_model(self, small_model):

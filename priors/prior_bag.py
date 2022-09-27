@@ -20,7 +20,7 @@ def get_batch(batch_size, seq_len, num_features, device=default_device
     if 'verbose' in hyperparameters and hyperparameters['verbose']:
         print('PRIOR_BAG:', weights, batch_assignments)
 
-    sample = sum([[prior_bag_priors_get_batch[int(prior_idx)](hyperparameters=hyperparameters, **args)] for prior_idx in batch_assignments], [])
+    sample = [prior_bag_priors_get_batch[int(prior_idx)](hyperparameters=hyperparameters, **args, **kwargs) for prior_idx in batch_assignments]
 
     x, y, y_ = zip(*sample)
     x, y, y_ = (torch.cat(x, 1).detach()
@@ -29,4 +29,3 @@ def get_batch(batch_size, seq_len, num_features, device=default_device
     return x, y, y_
 
 DataLoader = get_batch_to_dataloader(get_batch)
-DataLoader.num_outputs = 1

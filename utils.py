@@ -3,6 +3,7 @@ import math
 import argparse
 import random
 import datetime
+import itertools
 
 import torch
 from torch import nn
@@ -21,6 +22,26 @@ def get_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
             return float(current_step) / float(max(1, num_warmup_steps))
         progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
         return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+# copied from huggingface
+def get_restarting_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, steps_per_restart, num_cycles=0.5, last_epoch=-1):
+    assert num_training_steps % steps_per_restart == 0
+
+    def inner_lr_lambda(current_step, num_warmup_steps, num_training_steps):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+
+    def lr_lambda(current_step):
+        inner_step = current_step % steps_per_restart
+        return inner_lr_lambda(inner_step,
+                               num_warmup_steps if current_step < steps_per_restart else 0,
+                               steps_per_restart
+                               )
+
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
@@ -90,6 +111,11 @@ class SeqBN(nn.Module):
 
 
 def set_locals_in_self(locals):
+    """
+    Call this function like `set_locals_in_self(locals())` to set all local variables as object variables.
+    Especially useful right at the beginning of `__init__`.
+    :param locals: `locals()`
+    """
     self = locals['self']
     for var_name, val in locals.items():
         if var_name != 'self': setattr(self, var_name, val)
@@ -146,9 +172,11 @@ def nan_handling_missing_for_no_reason_value(set_value_to_nan=0.0):
 def nan_handling_missing_for_a_reason_value(set_value_to_nan=0.0):
     return get_nan_value(float('inf'), set_value_to_nan)
 
-def torch_nanmean(x, axis=0):
+def torch_nanmean(x, axis=0, return_nanshare=False):
     num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
     value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(axis=axis)
+    if return_nanshare:
+        return value / num, 1.-num/x.shape[axis]
     return value / num
 
 def torch_nanstd(x, axis=0):
@@ -170,18 +198,18 @@ def normalize_data(data, normalize_positions=-1):
 
     return data
 
-def remove_outliers(X, n_sigma=4):
+def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     # Expects T, B, H
     assert len(X.shape) == 3, "X must be T,B,H"
     #for b in range(X.shape[1]):
         #for col in range(X.shape[2]):
-    data = X
+    data = X if normalize_positions == -1 else X[:normalize_positions]
+    data_clean = data[:].clone()
     data_mean, data_std = torch_nanmean(data, axis=0), torch_nanstd(data, axis=0)
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
-    data_clean = X[:].clone()
-    data_clean[torch.logical_or(data > upper, data < lower)] = np.nan
+    data_clean[torch.logical_or(data_clean > upper, data_clean < lower)] = np.nan
     data_mean, data_std = torch_nanmean(data_clean, axis=0), torch_nanstd(data_clean, axis=0)
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
@@ -206,14 +234,31 @@ def print_on_master_only(is_master):
 
     __builtin__.print = print
 
+
 def init_dist(device):
-    if 'SLURM_PROCID' in os.environ and torch.cuda.device_count() > 1:
+    print('init dist')
+    if 'LOCAL_RANK' in os.environ:
+        # launched with torch.distributed.launch
+        rank = int(os.environ["LOCAL_RANK"])
+        print('torch.distributed.launch and my rank is', rank)
+        torch.cuda.set_device(rank)
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
+        torch.distributed.init_process_group(backend="nccl", init_method="env://", timeout=datetime.timedelta(seconds=20),
+                                             world_size=torch.cuda.device_count(), rank=rank)
+        torch.distributed.barrier()
+        print_on_master_only(rank == 0)
+        print(f"Distributed training on {torch.cuda.device_count()} GPUs, this is rank {rank}, "
+              "only I can print, but when using print(..., force=True) it will print on all ranks.")
+        return True, rank, f'cuda:{rank}'
+    elif 'SLURM_PROCID' in os.environ and torch.cuda.device_count() > 1:
+        # this is for multi gpu when starting with submitit
         assert device != 'cpu:0'
         rank = int(os.environ['SLURM_PROCID'])
         os.environ['MASTER_ADDR'] = 'localhost'
         os.environ['MASTER_PORT'] = '12355'
         torch.cuda.set_device(rank)
         os.environ['CUDA_VISIBLE_DEVICES'] = str(rank)
+        print('distributed submitit launch and my rank is', rank)
         torch.distributed.init_process_group(backend="nccl", init_method="env://", timeout=datetime.timedelta(seconds=20),
                                              world_size=torch.cuda.device_count(), rank=rank)
         torch.distributed.barrier()
@@ -234,3 +279,15 @@ class NOP():
         pass
     def __exit__(self, type, value, traceback):
         pass
+
+def check_compatibility(dl):
+    if hasattr(dl, 'num_outputs'):
+        print('`num_outputs` for the DataLoader is deprecated. It is assumed to be 1 from now on.')
+        assert dl.num_outputs != 1, "We assume num_outputs to be 1. Instead of the num_ouputs change your loss." \
+                                    "We specify the number of classes in the CE loss."
+
+def product_dict(dic):
+    keys = dic.keys()
+    vals = dic.values()
+    for instance in itertools.product(*vals):
+        yield dict(zip(keys, instance))

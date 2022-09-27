@@ -1,16 +1,17 @@
 import time
 import os
 from pathlib import Path
+from contextlib import nullcontext
 
+import torch
 from tqdm import tqdm
 import random
 import numpy as np
 
 from torch import nn
 
-from utils import torch_nanmean
-from datasets import *
-from model_builder import load_model
+from torch.utils.checkpoint import checkpoint
+from utils import normalize_data, torch_nanmean, to_ranking_low_mem, remove_outliers
 from scripts.tabular_baselines import get_scoring_string
 from scripts import tabular_metrics
 from scripts.transformer_prediction_interface import *
@@ -52,7 +53,6 @@ def eval_model_on_ds(i, e, valid_datasets, eval_positions, bptt, add_name, base_
         model_file, model_path, results_file = check_file(e)
 
     model, config_sample = load_model(base_path, model_file, device, None, verbose=False)
-    print(model[2].style_encoder)
 
     params = {'max_features': config_sample['num_features']
         , 'rescale_features': config_sample["normalize_by_used_features"]
@@ -79,7 +79,7 @@ def eval_model_on_ds(i, e, valid_datasets, eval_positions, bptt, add_name, base_
     return metrics_valid, config_sample, model_path
 
 
-def evaluate(datasets, bptt, eval_positions, metric_used, model
+def evaluate(datasets, bptt, eval_positions, metric_used, model, device='cpu'
              , verbose=False
              , return_tensor=False
              , **kwargs):
@@ -102,10 +102,10 @@ def evaluate(datasets, bptt, eval_positions, metric_used, model
     aggregated_metric_datasets, num_datasets = torch.tensor(0.0), 0
 
     # For each dataset
-    for [ds_name, X, y, categorical_feats, _, _] in tqdm.tqdm(datasets, desc='Iterate over datasets') if verbose else datasets:
+    for [ds_name, X, y, categorical_feats, _, _] in datasets:
         dataset_bptt = min(len(X), bptt)
-        # if verbose and dataset_bptt < bptt:
-        #    print(f'Dataset too small for given sequence length, reducing to {len(X)} ({bptt})')
+        #if verbose and dataset_bptt < bptt:
+        #    print(f'Dataset too small for given bptt, reducing to {len(X)} ({bptt})')
 
         aggregated_metric, num = torch.tensor(0.0), 0
         ds_result = {}
@@ -121,9 +121,11 @@ def evaluate(datasets, bptt, eval_positions, metric_used, model
                         , ds_name=ds_name
                         , eval_position = eval_position_real
                         , metric_used = metric_used
+                                  , device=device
                         ,**kwargs)
 
             if r is None:
+                print('Execution failed')
                 continue
 
             _, outputs, ys, best_configs, time_used = r
@@ -131,6 +133,17 @@ def evaluate(datasets, bptt, eval_positions, metric_used, model
             if torch.is_tensor(outputs):
                 outputs = outputs.to(outputs.device)
                 ys = ys.to(outputs.device)
+
+            # WARNING: This leaks information on the scaling of the labels
+            if isinstance(model, nn.Module) and "BarDistribution" in str(type(model.criterion)):
+                ys = (ys - torch.min(ys, axis=0)[0]) / (torch.max(ys, axis=0)[0] - torch.min(ys, axis=0)[0])
+
+            # If we use the bar distribution and the metric_used is r2 -> convert buckets
+            #  metric used is prob -> keep
+            if isinstance(model, nn.Module) and "BarDistribution" in str(type(model.criterion)) and (
+                    metric_used == tabular_metrics.r2_metric or metric_used == tabular_metrics.root_mean_squared_error_metric):
+                ds_result[f'{ds_name}_bar_dist_at_{eval_position}'] = outputs
+                outputs = model.criterion.mean(outputs)
 
             ys = ys.T
             ds_result[f'{ds_name}_best_configs_at_{eval_position}'] = best_configs
@@ -171,7 +184,7 @@ def check_file_exists(path):
             return np.load(f, allow_pickle=True).tolist()
     return None
 
-def generate_valid_split(X, y, bptt, eval_position, split_number=1):
+def generate_valid_split(X, y, bptt, eval_position, is_classification, split_number=1):
     """Generates a deteministic train-(test/valid) split. Both splits must contain the same classes and all classes in
     the entire datasets. If no such split can be sampled in 7 passes, returns None.
 
@@ -187,7 +200,6 @@ def generate_valid_split(X, y, bptt, eval_position, split_number=1):
     torch.manual_seed(split_number)
     perm = torch.randperm(X.shape[0]) if split_number > 1 else torch.arange(0, X.shape[0])
     X, y = X[perm], y[perm]
-
     while not done:
         if seed > 20:
             return None, None # No split could be generated in 7 passes, return None
@@ -195,13 +207,16 @@ def generate_valid_split(X, y, bptt, eval_position, split_number=1):
         i = random.randint(0, len(X) - bptt) if len(X) - bptt > 0 else 0
         y_ = y[i:i + bptt]
 
-        # Checks if all classes from dataset are contained and classes in train and test are equal (contain same
-        # classes) and
-        done = len(torch.unique(y_)) == len(torch.unique(y))
-        done = done and torch.all(torch.unique(y_) == torch.unique(y))
-        done = done and len(torch.unique(y_[:eval_position])) == len(torch.unique(y_[eval_position:]))
-        done = done and torch.all(torch.unique(y_[:eval_position]) == torch.unique(y_[eval_position:]))
-        seed = seed + 1
+        if is_classification:
+            # Checks if all classes from dataset are contained and classes in train and test are equal (contain same
+            # classes) and
+            done = len(torch.unique(y_)) == len(torch.unique(y))
+            done = done and torch.all(torch.unique(y_) == torch.unique(y))
+            done = done and len(torch.unique(y_[:eval_position])) == len(torch.unique(y_[eval_position:]))
+            done = done and torch.all(torch.unique(y_[:eval_position]) == torch.unique(y_[eval_position:]))
+            seed = seed + 1
+        else:
+            done = True
 
     eval_xs = torch.stack([X[i:i + bptt].clone()], 1)
     eval_ys = torch.stack([y[i:i + bptt].clone()], 1)
@@ -211,7 +226,7 @@ def generate_valid_split(X, y, bptt, eval_position, split_number=1):
 
 def evaluate_position(X, y, categorical_feats, model, bptt
                       , eval_position, overwrite, save, base_path, path_interfix, method, ds_name, fetch_only=False
-                      , max_time=300, split_number=1
+                      , max_time=300, split_number=1, metric_used=None, device='cpu'
                       , per_step_normalization=False, **kwargs):
     """
     Evaluates a dataset with a 'bptt' number of training samples.
@@ -250,24 +265,37 @@ def evaluate_position(X, y, categorical_feats, model, bptt
             return None
 
     ## Generate data splits
-    eval_xs, eval_ys = generate_valid_split(X, y, bptt, eval_position, split_number=split_number)
+    eval_xs, eval_ys = generate_valid_split(X, y, bptt, eval_position
+                                            , is_classification=tabular_metrics.is_classification(metric_used)
+                                            , split_number=split_number)
     if eval_xs is None:
-        return None
         print(f"No dataset could be generated {ds_name} {bptt}")
+        return None
 
     eval_ys = (eval_ys > torch.unique(eval_ys).unsqueeze(0)).sum(axis=1).unsqueeze(-1)
+
+    if isinstance(model, nn.Module):
+        model = model.to(device)
+        eval_xs = eval_xs.to(device)
+        eval_ys = eval_ys.to(device)
 
     start_time = time.time()
 
     if isinstance(model, nn.Module): # Two separate predict interfaces for transformer and baselines
-        outputs, best_configs = transformer_predict(model, eval_xs, eval_ys, eval_position, categorical_feats=categorical_feats, **kwargs), None
+        outputs, best_configs = transformer_predict(model, eval_xs, eval_ys, eval_position, metric_used=metric_used
+                                                    , categorical_feats=categorical_feats
+                                                    , inference_mode=True
+                                                    , device=device
+                                                    , extend_features=True,
+                                                    **kwargs), None
     else:
         _, outputs, best_configs = baseline_predict(model, eval_xs, eval_ys, categorical_feats
                                                     , eval_pos=eval_position
-                                                    , max_time=max_time, **kwargs)
-
+                                                    , device=device
+                                                    , max_time=max_time, metric_used=metric_used, **kwargs)
     eval_ys = eval_ys[eval_position:]
     if outputs is None:
+        print('Execution failed')
         return None
 
     if torch.is_tensor(outputs): # Transfers data to cpu for saving

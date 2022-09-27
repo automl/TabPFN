@@ -10,8 +10,9 @@ from priors.differentiable_prior import draw_random_style
 from tqdm import tqdm
 from pathlib import Path
 import random
-from model_builder import load_model
+from scripts.model_builder import load_model
 from scripts.transformer_prediction_interface import get_params_from_config
+from scripts.transformer_prediction_interface import load_model_workflow
 
 """
 ===============================
@@ -24,55 +25,9 @@ def eval_model_range(i_range, *args, **kwargs):
     for i in i_range:
         eval_model(i, *args, **kwargs)
 
-
-def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition=''):
-    """
-    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
-
-    :param i:
-    :param e:
-    :param eval_positions_valid:
-    :param add_name:
-    :param base_path:
-    :param device:
-    :param eval_addition:
-    :return:
-    """
-    def check_file(e):
-        model_file = f'models_diff/prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{e}.cpkt'
-        model_path = os.path.join(base_path, model_file)
-        # print('Evaluate ', model_path)
-        results_file = os.path.join(base_path,
-                                    f'models_diff/prior_diff_real_results{add_name}_n_{i}_epoch_{e}_{eval_addition}.pkl')
-        if not Path(model_path).is_file():  # or Path(results_file).is_file():
-            return None, None, None
-        return model_file, model_path, results_file
-
-    model_file = None
-    if e == -1:
-        for e_ in range(100, -1, -1):
-            model_file_, model_path_, results_file_ = check_file(e_)
-            if model_file_ is not None:
-                e = e_
-                model_file, model_path, results_file = model_file_, model_path_, results_file_
-                break
-    else:
-        model_file, model_path, results_file = check_file(e)
-
-    if model_file is None:
-        print('No checkpoint found')
-        return None
-
-    print(f'Loading {model_file}')
-
-    model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
-
-    return model, c, results_file
-
-
-def eval_model(i, e, valid_datasets, test_datasets, train_datasets, eval_positions_valid, eval_positions_test,
-               bptt_valid,
-               bptt_test, add_name, base_path, device='cpu', eval_addition='', **extra_tuning_args):
+def eval_model(i, e, valid_datasets, test_datasets, train_datasets, add_name, base_path,  eval_positions_valid=[1000], eval_positions_test=[1000],
+               bptt_valid=2000,
+               bptt_test=2000, device='cpu', eval_addition='', differentiable=False, **extra_tuning_args):
     """
     Differentiable model evaliation workflow. Evaluates and saves results to disk.
 
@@ -107,12 +62,12 @@ def eval_model(i, e, valid_datasets, test_datasets, train_datasets, eval_positio
     params.update(get_params_from_config(c))
 
     start = time.time()
-    metrics, metrics_valid, style, temperature, optimization_route = evaluate_differentiable_model(model, **params,
-                                                                                                   **extra_tuning_args)
+    metrics, metrics_valid, style, temperature, optimization_route = evaluate_point_model(model, **params,
+                                                                                                       **extra_tuning_args)
     print('Evaluation time: ', time.time() - start)
 
     print(results_file)
-    r = [c.copy(), metrics, metrics_valid, style.to('cpu'), temperature.to('cpu'), optimization_route]
+    r = [c.copy(), metrics, metrics_valid, style.to('cpu') if style else style, temperature.to('cpu') if temperature else temperature, optimization_route]
     with open(results_file, 'wb') as output:
         del r[0]['num_features_used']
         del r[0]['categorical_features_sampler']
@@ -128,22 +83,18 @@ INTERNAL HELPER FUNCTIONS
 ===============================
 """
 
-def evaluate_differentiable_model(model
+def evaluate_point_model(model
                                   , valid_datasets
                                   , test_datasets
                                   , train_datasets
-                                  , N_draws=100
-                                  , N_grad_steps=10
-                                  , eval_positions=None
                                   , eval_positions_test=None
-                                  , bptt=100
                                   , bptt_final=200
-                                  , style=None
-                                  , n_parallel_configurations=1
                                   , device='cpu'
                                   , selection_metric='auc'
                                   , final_splits=[1, 2, 3, 4, 5]
                                   , N_ensemble_configurations_list=[1, 5, 10, 20, 50, 100]
+                         , bptt=None
+                         , eval_positions=None
                                   , **kwargs):
     """
     Evaluation function for diffable model evaluation. Returns a list of results.
@@ -171,107 +122,38 @@ def evaluate_differentiable_model(model
     np.random.seed(0)
     random.seed(0)
 
-    diffable_metric = tabular_metrics.cross_entropy
     evaluation_metric = tabular_metrics.auc_metric
-    if selection_metric in ('auc', 'roc'):
-        selection_metric_min_max = 'max'
-        selection_metric = tabular_metrics.auc_metric
-        evaluation_metric = selection_metric
-    elif selection_metric in ('ce', 'selection_metric'):
-        selection_metric_min_max = 'min'
-        selection_metric = tabular_metrics.cross_entropy
-        evaluation_metric = selection_metric
-
-    print('Diffable metric', diffable_metric, ' Selection metric', selection_metric, ' Evaluation metric',
-          evaluation_metric)
-    print('N PARALLEL CONFIGURATIONS', n_parallel_configurations)
-    print('eval_positions', eval_positions)
-
-    def evaluate_valid(style, softmax_temperature, results, results_tracked):
-        result_valid = eval_step(valid_datasets, style, softmax_temperature=softmax_temperature,
-                                 return_tensor=False, inference_mode=True, selection_metric=selection_metric,
-                                 evaluation_metric=evaluation_metric, eval_positions=eval_positions, bptt=bptt, model=model[2])
-        result_valid = [float(result_valid[f'mean_select_at_{pos}']) for pos in eval_positions]
-        results += [result_valid]
-        results_tracked += [np.nanmean(result_valid)]
+    selection_metric = tabular_metrics.auc_metric
 
     model[2].to(device)
     model[2].eval()
 
-    results_on_valid, results_on_valid_tracked = [], []
-    best_style, best_softmax_temperature = style, torch.cat(
-        [torch.tensor([0.0]).to(device) for n in range(0, n_parallel_configurations)], 0)
-    optimization_routes = []
-
-    best_style = torch.cat([draw_random_style(model[3], device).detach() for n in range(0, n_parallel_configurations)],
-                      0)
-    best_softmax_temperature = torch.cat([torch.tensor([0.0]).to(device) for n in range(0, n_parallel_configurations)],
-                                    0)
-
-
-    for _ in tqdm(range(0, N_draws), desc='Iterate over Optimization initializations'): # Evaluates N hparam draws
-        style = torch.cat([draw_random_style(model[3], device).detach() for n in range(0, n_parallel_configurations)],
-                          0)
-        softmax_temperature = torch.cat([torch.tensor([0.0]).to(device) for n in range(0, n_parallel_configurations)],
-                                        0)
-
-        evaluate_valid(style, softmax_temperature, results_on_valid, results_on_valid_tracked)
-
-        print(f'Draw --> Valid Selection metric: {results_on_valid[-1]}')
-
-        if N_grad_steps > 0:
-            gradient_optimize_result = gradient_optimize_style(model, style, N_grad_steps
-                                                               , softmax_temperature=softmax_temperature
-                                                               , model=model[2]
-                                                               , train_datasets=train_datasets
-                                                               , valid_datasets=valid_datasets
-                                                               , selection_metric_min_max=selection_metric_min_max
-                                                               , **kwargs)
-            optimization_routes += [gradient_optimize_result['optimization_route']]
-
-            evaluate_valid(gradient_optimize_result['best_style']
-                                          , gradient_optimize_result['best_temperature']
-                                          , results_on_valid, results_on_valid_tracked)
-
-            print(f'After diff --> Valid Selection metric: {results_on_valid[-1]}')
-
-        if selection_metric_min_max == 'min':
-            is_best = (results_on_valid_tracked[-1] <= min(results_on_valid_tracked))
-        else:
-            is_best = (results_on_valid_tracked[-1] >= max(results_on_valid_tracked))
-
-        if is_best or best_style is None:
-            best_style = gradient_optimize_result['best_style'].clone()
-            best_softmax_temperature = gradient_optimize_result['best_temperature'].clone()
-    torch.cuda.empty_cache()
-
     def final_evaluation():
         print('Running eval dataset with final params (no gradients)..')
-        print(best_style, best_softmax_temperature)
         result_test = []
         for N_ensemble_configurations in N_ensemble_configurations_list:
             print(f'Running with {N_ensemble_configurations} ensemble_configurations')
             kwargs['N_ensemble_configurations'] = N_ensemble_configurations
             splits = []
             for split in final_splits:
-                splits += [eval_step(test_datasets, best_style, softmax_temperature=best_softmax_temperature
+                splits += [eval_step(test_datasets, None, softmax_temperature=torch.tensor([0])
                                      , return_tensor=False, eval_positions=eval_positions_test,
-                                     bptt=bptt_final, inference_mode=True, split_number=split, model=model[2]
-                                     , selection_metric=selection_metric, evaluation_metric=evaluation_metric)]
+                                     bptt=bptt_final, split_number=split, model=model[2], device=device
+                                     , selection_metric=selection_metric, evaluation_metric=evaluation_metric
+                                     , **kwargs)]
             result_test += [splits]
 
         print('Running valid dataset with final params (no gradients)..')
-        result_valid = eval_step(valid_datasets, best_style, softmax_temperature=best_softmax_temperature
+        result_valid = eval_step(valid_datasets, None, softmax_temperature=torch.tensor([0])
                                  , return_tensor=False, eval_positions=eval_positions_test,
-                                 bptt=bptt_final, inference_mode=True, model=model[2]
-                                 , selection_metric=selection_metric, evaluation_metric=evaluation_metric)
+                                 bptt=bptt_final, model=model[2], device=device
+                                 , selection_metric=selection_metric, evaluation_metric=evaluation_metric,**kwargs)
 
         return result_test, result_valid
 
     result_test, result_valid = final_evaluation()
 
-    return result_test, result_valid, best_style, best_softmax_temperature, optimization_routes
-
+    return result_test, result_valid, None, None, None
 
 def eval_step(ds, used_style, selection_metric, evaluation_metric, eval_positions, return_tensor=True, **kwargs):
     def step():
@@ -284,7 +166,6 @@ def eval_step(ds, used_style, selection_metric, evaluation_metric, eval_position
                         , save=False
                         , path_interfix=None
                         , base_path=None
-                        , verbose=True
                         , **kwargs)
 
     if return_tensor:
@@ -299,7 +180,7 @@ def eval_step(ds, used_style, selection_metric, evaluation_metric, eval_position
     return r
 
 
-def gradient_optimize_style(model, init_style, steps, softmax_temperature, train_datasets, valid_datasets, learning_rate=0.03, optimize_all=False,
+def gradient_optimize_style(model, init_style, steps, softmax_temperature, train_datasets, valid_datasets, bptt, learning_rate=0.03, optimize_all=False,
                             limit_style=True, N_datasets_sampled=90, optimize_softmax_temperature=True, selection_metric_min_max='max', **kwargs):
     """
     Uses gradient based methods to optimize 'style' on the 'train_datasets' and uses stopping with 'valid_datasets'.
@@ -331,7 +212,7 @@ def gradient_optimize_style(model, init_style, steps, softmax_temperature, train
 
     def eval_opt(ds, return_tensor=True, inference_mode=False):
         result = eval_step(ds, grad_style, softmax_temperature=softmax_temperature, return_tensor=return_tensor
-                           , inference_mode=inference_mode, model=model[2], **kwargs)
+                           , inference_mode=inference_mode, model=model[2], bptt=bptt, **kwargs)
 
         diffable_metric = result['mean_metric']
         selection_metric = result['mean_select']
@@ -369,9 +250,10 @@ def gradient_optimize_style(model, init_style, steps, softmax_temperature, train
         optimization_route_selection_valid += [float(selection_metric_valid)]
         optimization_route_diffable_valid += [float(diffable_metric_valid)]
 
-        is_best = (selection_metric_min_max == 'min' and best_selection_metric > selection_metric_valid)
+        is_best = (best_selection_metric is None)
+        is_best = is_best or (selection_metric_min_max == 'min' and best_selection_metric > selection_metric_valid)
         is_best = is_best or (selection_metric_min_max == 'max' and best_selection_metric < selection_metric_valid)
-        if (best_selection_metric is None) or (not np.isnan(selection_metric_valid) and is_best):
+        if (not np.isnan(selection_metric_valid) and is_best):
             print('New best', best_selection_metric, selection_metric_valid)
             best_style = grad_style.detach().clone()
             best_temperature = softmax_temperature.detach().clone()

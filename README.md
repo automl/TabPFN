@@ -2,11 +2,8 @@
 
 ## Installation
 ```
-git clone git@github.com:automl/TabPFN.git
-cd TabPFN
 conda create -n TabPFN python=3.7
-conda activate TabPFN
-pip install -r requirements.txt
+$environment_path$/pip install -r requirements.txt
 ```
 
 To run the autogluon baseline please create a separate environment and install autogluon==0.4.0, installation in the same environment as our other baselines is not possible.

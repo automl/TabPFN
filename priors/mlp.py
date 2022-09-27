@@ -23,8 +23,12 @@ def causes_sampler_f(num_causes):
     std = np.abs(np.random.normal(0, 1, (num_causes)) * means)
     return means, std
 
-def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal', **kwargs):
-    if ('mix_activations' in hyperparameters) and hyperparameters['mix_activations']:
+def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal'
+              , epoch=None, **kwargs):
+    if 'multiclass_type' in hyperparameters and hyperparameters['multiclass_type'] == 'multi_node':
+        num_outputs = num_outputs * hyperparameters['num_classes']
+
+    if not (('mix_activations' in hyperparameters) and hyperparameters['mix_activations']):
         s = hyperparameters['prior_mlp_activations']()
         hyperparameters['prior_mlp_activations'] = lambda : s
 
@@ -84,12 +88,12 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                             w, h = p.shape[0] // n_blocks, p.shape[1] // n_blocks
                             keep_prob = (n_blocks*w*h) / p.numel()
                             for block in range(0, n_blocks):
-                                nn.init.normal_(p[w * block: w * (block+1), h * block: h * (block+1)], std=self.init_std / keep_prob**(1/2))
+                                nn.init.normal_(p[w * block: w * (block+1), h * block: h * (block+1)], std=self.init_std / keep_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1))
                     else:
                         if len(p.shape) == 2: # Only apply to weight matrices and not bias
                             dropout_prob = self.prior_mlp_dropout_prob if i > 0 else 0.0  # Don't apply dropout in first layer
                             dropout_prob = min(dropout_prob, 0.99)
-                            nn.init.normal_(p, std=self.init_std / (1. - dropout_prob)**(1/2))
+                            nn.init.normal_(p, std=self.init_std / (1. - dropout_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1)))
                             p *= torch.bernoulli(torch.zeros_like(p) + 1. - dropout_prob)
 
         def forward(self):
@@ -151,23 +155,34 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 x = causes
 
             if bool(torch.any(torch.isnan(x)).detach().cpu().numpy()) or bool(torch.any(torch.isnan(y)).detach().cpu().numpy()):
+                print('Nan caught in MLP model x:', torch.isnan(x).sum(), ' y:', torch.isnan(y).sum())
+                print({k: hyperparameters[k] for k in ['is_causal', 'num_causes', 'prior_mlp_hidden_dim'
+                    , 'num_layers', 'noise_std', 'y_is_effect', 'pre_sample_weights', 'prior_mlp_dropout_prob'
+                    , 'pre_sample_causes']})
+
                 x[:] = 0.0
-                y[:] = 1.0
+                y[:] = -100 # default ignore index for CE
+
+            # random feature rotation
+            if self.random_feature_rotation:
+                x = x[..., (torch.arange(x.shape[-1], device=device)+random.randrange(x.shape[-1])) % x.shape[-1]]
 
             return x, y
 
-    model = MLP(hyperparameters).to(device)
+    if hyperparameters.get('new_mlp_per_example', False):
+        get_model = lambda: MLP(hyperparameters).to(device)
+    else:
+        model = MLP(hyperparameters).to(device)
+        get_model = lambda: model
 
-    sample = sum([[model()] for _ in range(0, batch_size)], [])
+    sample = [get_model()() for _ in range(0, batch_size)]
 
     x, y = zip(*sample)
     y = torch.cat(y, 1).detach().squeeze(2)
     x = torch.cat(x, 1).detach()
-    x = x[..., torch.randperm(x.shape[-1])]
 
     return x, y, y
 
 
 DataLoader = get_batch_to_dataloader(get_batch)
-DataLoader.num_outputs = 1
 

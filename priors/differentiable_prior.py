@@ -61,10 +61,22 @@ class DifferentiableHyperparameter(nn.Module):
                 def make_beta(b, k):
                     return lambda b=b, k=k: self.scale * beta_sampler_f(b, k)()
                 self.sampler = lambda make_beta=make_beta : sample_meta(make_beta)
+            if self.distribution == "meta_gamma":
+                ## Truncated normal where std and mean are drawn randomly logarithmically scaled
+                if hasattr(self, 'alpha') and hasattr(self, 'scale'):
+                    self.hparams = {'alpha': lambda: (None, self.alpha), 'scale': lambda: (None, self.scale)}
+                else:
+                    self.hparams = {"alpha": DifferentiableHyperparameter(distribution="uniform", min=0.0
+                                                                                          , max=math.log(self.max_alpha), **args_passed)
+                                    , "scale": DifferentiableHyperparameter(distribution="uniform", min=0.0
+                                                                                           , max=self.max_scale, **args_passed)}
+                def make_gamma(alpha, scale):
+                    return lambda alpha=alpha, scale=scale: self.lower_bound + round(gamma_sampler_f(math.exp(alpha), scale / math.exp(alpha))()) if self.round else self.lower_bound + gamma_sampler_f(math.exp(alpha), scale / math.exp(alpha))()
+                self.sampler = lambda make_gamma=make_gamma : sample_meta(make_gamma)
             elif self.distribution == "meta_trunc_norm_log_scaled":
                 # these choices are copied down below, don't change these without changing `replace_differentiable_distributions`
-                self.min_std = self.min_std if hasattr(self, 'min_std') else 0.001
-                self.max_std = self.max_std if hasattr(self, 'max_std') else self.max_mean
+                self.min_std = self.min_std if hasattr(self, 'min_std') else 0.01
+                self.max_std = self.max_std if hasattr(self, 'max_std') else 1.0
                 ## Truncated normal where std and mean are drawn randomly logarithmically scaled
                 if not hasattr(self, 'log_mean'):
                     self.hparams = {"log_mean": DifferentiableHyperparameter(distribution="uniform", min=math.log(self.min_mean)
@@ -74,31 +86,32 @@ class DifferentiableHyperparameter(nn.Module):
                 else:
                     self.hparams = {'log_mean': lambda: (None, self.log_mean), 'log_std': lambda: (None, self.log_std)}
                 def make_trunc_norm(log_mean, log_std):
-                    return ((lambda : self.lower_bound + round(trunc_norm_sampler_f(math.exp(log_mean), math.exp(log_std))())) if self.round
-                            else (lambda: self.lower_bound + trunc_norm_sampler_f(math.exp(log_mean), math.exp(log_std))()))
+                    return ((lambda : self.lower_bound + round(trunc_norm_sampler_f(math.exp(log_mean), math.exp(log_mean)*math.exp(log_std))())) if self.round
+                            else (lambda: self.lower_bound + trunc_norm_sampler_f(math.exp(log_mean), math.exp(log_mean)*math.exp(log_std))()))
 
                 self.sampler = lambda make_trunc_norm=make_trunc_norm: sample_meta(make_trunc_norm)
             elif self.distribution == "meta_trunc_norm":
-                self.min_std = self.min_std if hasattr(self, 'min_std') else 0
-                self.max_std = self.max_std if hasattr(self, 'max_std') else self.max_mean
+                self.min_std = self.min_std if hasattr(self, 'min_std') else 0.01
+                self.max_std = self.max_std if hasattr(self, 'max_std') else 1.0
                 self.hparams = {"mean": DifferentiableHyperparameter(distribution="uniform", min=self.min_mean
                                                                                       , max=self.max_mean, **args_passed)
                                 , "std": DifferentiableHyperparameter(distribution="uniform", min=self.min_std
                                                                                        , max=self.max_std, **args_passed)}
                 def make_trunc_norm(mean, std):
                     return ((lambda: self.lower_bound + round(
-                        trunc_norm_sampler_f(math.exp(mean), math.exp(std))())) if self.round
+                        trunc_norm_sampler_f(mean, std)())) if self.round
                             else (
-                        lambda make_trunc_norm=make_trunc_norm: self.lower_bound + trunc_norm_sampler_f(math.exp(mean), math.exp(std))()))
+                        lambda make_trunc_norm=make_trunc_norm: self.lower_bound + trunc_norm_sampler_f(mean, std)()))
                 self.sampler = lambda : sample_meta(make_trunc_norm)
             elif self.distribution == "meta_choice":
                 if hasattr(self, 'choice_1_weight'):
                     self.hparams = {f'choice_{i}_weight': lambda: (None, getattr(self, f'choice_{i}_weight')) for i in range(1, len(self.choice_values))}
                 else:
-                    self.hparams = {f"choice_{i}_weight": DifferentiableHyperparameter(distribution="uniform", min=-5.0
-                                                                                          , max=6.0, **args_passed) for i in range(1, len(self.choice_values))}
+                    self.hparams = {f"choice_{i}_weight": DifferentiableHyperparameter(distribution="uniform", min=-3.0
+                                                                                          , max=5.0, **args_passed) for i in range(1, len(self.choice_values))}
                 def make_choice(**choices):
-                    weights = torch.softmax(torch.tensor([1.0] + [choices[i] for i in choices], dtype=torch.float), 0)  # create a tensor of weights
+                    choices = torch.tensor([1.0] + [choices[i] for i in choices], dtype=torch.float)
+                    weights = torch.softmax(choices, 0)  # create a tensor of weights
                     sample = torch.multinomial(weights, 1, replacement=True).numpy()[0]
                     return self.choice_values[sample]
 
@@ -218,6 +231,7 @@ def get_batch(batch_size, seq_len, num_features, get_batch
     assert num_models * batch_size_per_gp_sample == batch_size, f'Batch size ({batch_size}) not divisible by batch_size_per_gp_sample ({batch_size_per_gp_sample})'
 
     args = {'device': device, 'seq_len': seq_len, 'num_features': num_features, 'batch_size': batch_size_per_gp_sample}
+    args = {**kwargs, **args}
 
     models = [DifferentiablePrior(get_batch, hyperparameters, differentiable_hyperparameters, args) for _ in range(num_models)]
     sample = sum([[model()] for model in models], [])
@@ -245,15 +259,12 @@ def get_batch(batch_size, seq_len, num_features, get_batch
                                         , torch.cat(y, 1).detach()
                                         , torch.cat(y_, 1).detach()
                                         , packed_hyperparameters)#list(itertools.chain.from_iterable(itertools.repeat(x, batch_size_per_gp_sample) for x in packed_hyperparameters)))#torch.repeat_interleave(torch.stack(packed_hyperparameters, 0).detach(), repeats=batch_size_per_gp_sample, dim=0))
-
-    return x, y, y_, packed_hyperparameters
+    return x, y, y_, (packed_hyperparameters if hyperparameters.get('differentiable_hps_as_style', True) else None)
 
 DataLoader = get_batch_to_dataloader(get_batch)
-DataLoader.num_outputs = 1
-#DataLoader.validate = lambda : 0
 
 def draw_random_style(dl, device):
-    (hp_embedding, data, targets_), targets = next(iter(dl))
+    (hp_embedding, _, _), _, _ = next(iter(dl))
     return hp_embedding.to(device)[0:1, :]
 
 def merge_style_with_info(diff_hparams_keys, diff_hparams_f, style, transform=True):
@@ -277,16 +288,19 @@ def replace_differentiable_distributions(config):
         elif distribution == 'meta_beta':
             diff_hp_dict['k'] = CSH.UniformFloatHyperparameter(name+'_k', diff_hp_dict['min'], diff_hp_dict['max'])
             diff_hp_dict['b'] = CSH.UniformFloatHyperparameter(name+'_b', diff_hp_dict['min'], diff_hp_dict['max'])
+        elif distribution == 'meta_gamma':
+            diff_hp_dict['alpha'] = CSH.UniformFloatHyperparameter(name+'_k', 0.0, math.log(diff_hp_dict['max_alpha']))
+            diff_hp_dict['scale'] = CSH.UniformFloatHyperparameter(name+'_b', 0.0, diff_hp_dict['max_scale'])
         elif distribution == 'meta_choice':
             for i in range(1, len(diff_hp_dict['choice_values'])):
-                diff_hp_dict[f'choice_{i}_weight'] = CSH.UniformFloatHyperparameter(name+f'choice_{i}_weight', -5.0, 6.0)
+                diff_hp_dict[f'choice_{i}_weight'] = CSH.UniformFloatHyperparameter(name+f'choice_{i}_weight', -3.0, 5.0)
         elif distribution == 'meta_choice_mixed':
             for i in range(1, len(diff_hp_dict['choice_values'])):
-                diff_hp_dict[f'choice_{i}_weight'] = CSH.UniformFloatHyperparameter(name+f'choice_{i}_weight', -5.0, 6.0)
+                diff_hp_dict[f'choice_{i}_weight'] = CSH.UniformFloatHyperparameter(name+f'choice_{i}_weight', -3.0, 5.0)
         elif distribution == 'meta_trunc_norm_log_scaled':
             diff_hp_dict['log_mean'] = CSH.UniformFloatHyperparameter(name+'_log_mean', math.log(diff_hp_dict['min_mean']), math.log(diff_hp_dict['max_mean']))
-            min_std = diff_hp_dict['min_std'] if 'min_std' in diff_hp_dict else 0.001
-            max_std = diff_hp_dict['max_std'] if 'max_std' in diff_hp_dict else diff_hp_dict['max_mean']
+            min_std = diff_hp_dict['min_std'] if 'min_std' in diff_hp_dict else 0.1
+            max_std = diff_hp_dict['max_std'] if 'max_std' in diff_hp_dict else 1.0
             diff_hp_dict['log_std'] = CSH.UniformFloatHyperparameter(name+'_log_std', math.log(min_std), math.log(max_std))
         else:
             raise ValueError(f'Unknown distribution {distribution}')

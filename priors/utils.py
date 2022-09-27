@@ -1,6 +1,7 @@
 import random
 
 import torch
+import seaborn as sns
 
 from utils import set_locals_in_self
 from .prior import PriorDataLoader
@@ -16,44 +17,43 @@ def get_batch_to_dataloader(get_batch_method_):
         get_batch_method = get_batch_method_
 
         # Caution, you might need to set self.num_features manually if it is not part of the args.
-        def __init__(self, num_steps, fuse_x_y=False, **get_batch_kwargs):
+        def __init__(self, num_steps, **get_batch_kwargs):
             set_locals_in_self(locals())
+
             # The stuff outside the or is set as class attribute before instantiation.
             self.num_features = get_batch_kwargs.get('num_features') or self.num_features
-            self.num_outputs = get_batch_kwargs.get('num_outputs') or self.num_outputs
+            self.epoch_count = 0
             print('DataLoader.__dict__', self.__dict__)
 
         @staticmethod
-        def gbm(*args, fuse_x_y=True, **kwargs):
-            dynamic_seq_len = callable(kwargs['seq_len'])
-            kwargs['seq_len'] = kwargs['seq_len']() if dynamic_seq_len else kwargs['seq_len']
+        def gbm(*args, eval_pos_seq_len_sampler, **kwargs):
+            kwargs['single_eval_pos'], kwargs['seq_len'] = eval_pos_seq_len_sampler()
             # Scales the batch size dynamically with the power of 'dynamic_batch_size'.
             # A transformer with quadratic memory usage in the seq len would need a power of 2 to keep memory constant.
-            if dynamic_seq_len and 'dynamic_batch_size' in kwargs and kwargs['dynamic_batch_size'] > 0:
+            if 'dynamic_batch_size' in kwargs and kwargs['dynamic_batch_size'] > 0 and kwargs['dynamic_batch_size']:
                 kwargs['batch_size'] = kwargs['batch_size'] * math.floor(math.pow(kwargs['seq_len_maximum'], kwargs['dynamic_batch_size']) / math.pow(kwargs['seq_len'], kwargs['dynamic_batch_size']))
             batch = get_batch_method_(*args, **kwargs)
             x, y, target_y, style = batch if len(batch) == 4 else (batch[0], batch[1], batch[2], None)
-            if fuse_x_y:
-                return torch.cat([x, torch.cat([torch.zeros_like(y[:1]), y[:-1]], 0).unsqueeze(-1).float()],
-                                 -1), target_y
-            else:
-                return (style, x, y), target_y
+            return (style, x, y), target_y, kwargs['single_eval_pos']
 
         def __len__(self):
             return self.num_steps
 
-        def __iter__(self):
-            return iter(self.gbm(**self.get_batch_kwargs, fuse_x_y=self.fuse_x_y) for _ in range(self.num_steps))
+        def get_test_batch(self): # does not increase epoch_count
+            return self.gbm(**self.get_batch_kwargs, epoch=self.epoch_count, model=self.model if hasattr(self, 'model') else None)
 
+        def __iter__(self):
+            assert hasattr(self, 'model'), "Please assign model with `dl.model = ...` before training."
+            self.epoch_count += 1
+            return iter(self.gbm(**self.get_batch_kwargs, epoch=self.epoch_count - 1, model=self.model) for _ in range(self.num_steps))
 
     return DL
 
-import seaborn as sns
-def plot_features(data, targets, fig=None):
+def plot_features(data, targets, fig=None, categorical=True):
     if torch.is_tensor(data):
         data = data.detach().cpu().numpy()
         targets = targets.detach().cpu().numpy()
-    #data = np.concatenate([data, data[:, -1:]], -1)
+    #data = np.concatenate([data, np.expand_dims(targets, -1)], -1)
     #df = pd.DataFrame(data, columns=list(range(0, data.shape[1])))
     #g = sns.pairplot(df, hue=data.shape[1]-1, palette="Set2", diag_kind="kde", height=2.5)
     #plt.legend([], [], frameon=False)
@@ -67,17 +67,28 @@ def plot_features(data, targets, fig=None):
     spec2 = gridspec.GridSpec(ncols=data.shape[1], nrows=data.shape[1], figure=fig2)
     for d in range(0, data.shape[1]):
         for d2 in range(0, data.shape[1]):
+            if d > d2:
+                continue
             sub_ax = fig2.add_subplot(spec2[d, d2])
+            sub_ax.set_xticks([])
+            sub_ax.set_yticks([])
             if d == d2:
-                sns.kdeplot(data[:, d],hue=targets[:],ax=sub_ax,legend=False, palette="deep")
+                if categorical:
+                    sns.kdeplot(data[:, d],hue=targets[:],ax=sub_ax,legend=False, palette="deep")
+                else:
+                    sns.kdeplot(data[:, d], ax=sub_ax, legend=False)
                 sub_ax.set(ylabel=None)
             else:
-                sns.scatterplot(x=data[:, d], y=data[:, d2],
+                if categorical:
+                    sns.scatterplot(x=data[:, d], y=data[:, d2],
                            hue=targets[:],legend=False, palette="deep")
+                else:
+                    sns.scatterplot(x=data[:, d], y=data[:, d2],
+                                    hue=targets[:], legend=False)
                 #plt.scatter(data[:, d], data[:, d2],
                 #               c=targets[:])
-            sub_ax.get_xaxis().set_ticks([])
-            sub_ax.get_yaxis().set_ticks([])
+            #sub_ax.get_xaxis().set_ticks([])
+            #sub_ax.get_yaxis().set_ticks([])
     plt.subplots_adjust(wspace=0.05, hspace=0.05)
     fig2.show()
 

@@ -8,24 +8,24 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 
 class StyleEncoder(nn.Module):
-    def __init__(self, em_size, hyperparameter_definitions):
+    def __init__(self, num_hyperparameters, em_size):
         super().__init__()
-        # self.embeddings = {}
         self.em_size = em_size
-        # self.hyperparameter_definitions = {}
-        # for hp in hyperparameter_definitions:
-        #     self.embeddings[hp] = nn.Linear(1, self.em_size)
-        # self.embeddings = nn.ModuleDict(self.embeddings)
-        self.embedding = nn.Linear(hyperparameter_definitions.shape[0], self.em_size)
+        self.embedding = nn.Linear(num_hyperparameters, self.em_size)
 
-    def forward(self, hyperparameters):  # T x B x num_features
-        # Make faster by using matrices
-        # sampled_embeddings = [torch.stack([
-        #     self.embeddings[hp](torch.tensor([batch[hp]], device=self.embeddings[hp].weight.device, dtype=torch.float))
-        #     for hp in batch
-        # ], -1).sum(-1) for batch in hyperparameters]
-        # return torch.stack(sampled_embeddings, 0)
+    def forward(self, hyperparameters):  # B x num_hps
         return self.embedding(hyperparameters)
+
+
+class StyleEmbEncoder(nn.Module):
+    def __init__(self, num_hyperparameters, em_size, num_embeddings=100):
+        super().__init__()
+        assert num_hyperparameters == 1
+        self.em_size = em_size
+        self.embedding = nn.Embedding(num_embeddings, self.em_size)
+
+    def forward(self, hyperparameters):  # B x num_hps
+        return self.embedding(hyperparameters.squeeze(1))
 
 
 class _PositionalEncoding(nn.Module):
@@ -97,6 +97,71 @@ def get_normalized_uniform_encoder(encoder_creator):
     return lambda in_dim, out_dim: nn.Sequential(Normalize(.5, math.sqrt(1/12)), encoder_creator(in_dim, out_dim))
 
 
+def get_normalized_encoder(encoder_creator, data_std):
+    return lambda in_dim, out_dim: nn.Sequential(Normalize(0., data_std), encoder_creator(in_dim, out_dim))
+
+
+class ZNormalize(nn.Module):
+    def forward(self, x):
+        return (x-x.mean(-1,keepdim=True))/x.std(-1,keepdim=True)
+
+
+class AppendEmbeddingEncoder(nn.Module):
+    def __init__(self, base_encoder, num_features, emsize):
+        super().__init__()
+        self.num_features = num_features
+        self.base_encoder = base_encoder
+        self.emb = nn.Parameter(torch.zeros(emsize))
+
+    def forward(self, x):
+        if (x[-1] == 1.).all():
+            append_embedding = True
+        else:
+            assert (x[-1] == 0.).all(), "You need to specify as last position whether to append embedding. " \
+                                        "If you don't want this behavior, please use the wrapped encoder instead."
+            append_embedding = False
+        x = x[:-1]
+        encoded_x = self.base_encoder(x)
+        if append_embedding:
+            encoded_x = torch.cat([encoded_x, self.emb[None, None, :].repeat(1, encoded_x.shape[1], 1)], 0)
+        return encoded_x
+
+def get_append_embedding_encoder(encoder_creator):
+    return lambda num_features, emsize: AppendEmbeddingEncoder(encoder_creator(num_features, emsize), num_features, emsize)
+
+
+class VariableNumFeaturesEncoder(nn.Module):
+    def __init__(self, base_encoder, num_features):
+        super().__init__()
+        self.base_encoder = base_encoder
+        self.num_features = num_features
+
+    def forward(self, x):
+        x = x * (self.num_features/x.shape[-1])
+        x = torch.cat((x, torch.zeros(*x.shape[:-1], self.num_features - x.shape[-1], device=x.device)), -1)
+        return self.base_encoder(x)
+
+
+def get_variable_num_features_encoder(encoder_creator):
+    return lambda num_features, emsize: VariableNumFeaturesEncoder(encoder_creator(num_features, emsize), num_features)
+
+class NoMeanEncoder(nn.Module):
+    """
+    This can be useful for any prior that is translation invariant in x or y.
+    A standard GP for example is translation invariant in x.
+    That is, GP(x_test+const,x_train+const,y_train) = GP(x_test,x_train,y_train).
+    """
+    def __init__(self, base_encoder):
+        super().__init__()
+        self.base_encoder = base_encoder
+
+    def forward(self, x):
+        return self.base_encoder(x - x.mean(0, keepdim=True))
+
+
+def get_no_mean_encoder(encoder_creator):
+    return lambda num_features, emsize: NoMeanEncoder(encoder_creator(num_features, emsize))
+
 Linear = nn.Linear
 MLP = lambda num_features, emsize: nn.Sequential(nn.Linear(num_features+1,emsize*2),
                                                  nn.ReLU(),
@@ -120,76 +185,29 @@ class NanHandlingEncoder(nn.Module):
             x = torch.nan_to_num(x, nan=0.0)
         return self.layer(x)
 
+
 class Linear(nn.Linear):
-    def __init__(self, num_features, emsize):
+    def __init__(self, num_features, emsize, replace_nan_by_zero=False):
         super().__init__(num_features, emsize)
         self.num_features = num_features
         self.emsize = emsize
+        self.replace_nan_by_zero = replace_nan_by_zero
 
     def forward(self, x):
-        x = torch.nan_to_num(x, nan=0.0)
+        if self.replace_nan_by_zero:
+            x = torch.nan_to_num(x, nan=0.0)
         return super().forward(x)
 
-class SequenceSpanningEncoder(nn.Module):
-    # Regular Encoder transforms Seq_len, B, S -> Seq_len, B, E attending only to last dimension
-    # This Encoder accesses the Seq_Len dimension additionally
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self.__dict__.setdefault('replace_nan_by_zero', True)
 
-    # Why would we want this? We can learn normalization and embedding of features
-    #    , this might be more important for e.g. categorical, ordinal feats, nan detection
-    # However maybe this can be easily learned through transformer as well?
-    # A problem is to make this work across any sequence length and be independent of ordering
-
-    # We could use average and maximum pooling and use those with a linear layer
-
-
-    # Another idea !! Similar to this we would like to encode features so that their number is variable
-    # We would like to embed features, also using knowledge of the features in the entire sequence
-
-    # We could use convolution or another transformer
-    # Convolution:
-
-    # Transformer/Conv across sequence dimension that encodes and normalizes features
-    #    -> Transformer across feature dimension that encodes features to a constant size
-
-    # Conv with flexible features but no sequence info: S,B,F -(reshape)-> S*B,1,F
-    #   -(Conv1d)-> S*B,N,F -(AvgPool,MaxPool)-> S*B,N,1 -> S,B,N
-    # This probably won't work since it's missing a way to recognize which feature is encoded
-
-    # Transformer with flexible features: S,B,F -> F,B*S,1 -> F2,B*S,1 -> S,B,F2
-
-    def __init__(self, num_features, em_size):
-        super().__init__()
-
-        raise NotImplementedError()
-        # Seq_len, B, S -> Seq_len, B, E
-        #
-        self.convs = torch.nn.ModuleList([nn.Conv1d(64 if i else 1, 64, 3) for i in range(5)])
-        # self.linear = nn.Linear(64, emsize)
-
-class TransformerBasedFeatureEncoder(nn.Module):
-    def __init__(self, num_features, emsize):
-        super().__init__()
-
-        hidden_emsize = emsize
-        encoder = Linear(1, hidden_emsize)
-        n_out = emsize
-        nhid = 2*emsize
-        dropout =0.0
-        nhead=4
-        nlayers=4
-        model = nn.Transformer(nhead=nhead, num_encoder_layers=4, num_decoder_layers=4, d_model=1)
-
-    def forward(self, *input):
-        # S,B,F -> F,S*B,1 -> F2,S*B,1 -> S,B,F2
-        input = input.transpose()
-        self.model(input)
 
 class Conv(nn.Module):
     def __init__(self, input_size, emsize):
         super().__init__()
         self.convs = torch.nn.ModuleList([nn.Conv2d(64 if i else 1, 64, 3) for i in range(5)])
         self.linear = nn.Linear(64,emsize)
-
 
     def forward(self, x):
         size = math.isqrt(x.shape[-1])
@@ -204,8 +222,6 @@ class Conv(nn.Module):
         return self.linear(x)
 
 
-
-
 class CanEmb(nn.Embedding):
     def __init__(self, num_features, num_embeddings: int, embedding_dim: int, *args, **kwargs):
         assert embedding_dim % num_features == 0
@@ -218,8 +234,10 @@ class CanEmb(nn.Embedding):
         x = super().forward(lx)
         return x.view(*x.shape[:-2], -1)
 
+
 def get_Canonical(num_classes):
     return lambda num_features, emsize: CanEmb(num_features, num_classes, emsize)
+
 
 def get_Embedding(num_embs_per_feature=100):
     return lambda num_features, emsize: EmbeddingEncoder(num_features, emsize, num_embs=num_embs_per_feature)

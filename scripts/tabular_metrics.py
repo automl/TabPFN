@@ -10,9 +10,24 @@ Includes a few metric as well as functions composing metrics on results files.
 
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score, accuracy_score, balanced_accuracy_score, average_precision_score
+from sklearn.metrics import roc_auc_score, accuracy_score, balanced_accuracy_score, average_precision_score, mean_squared_error, mean_absolute_error, r2_score
 from scipy.stats import rankdata
 import pandas as pd
+
+def root_mean_squared_error_metric(target, pred):
+    target = torch.tensor(target) if not torch.is_tensor(target) else target
+    pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+    return torch.sqrt(torch.nn.functional.mse_loss(target, pred))
+
+def mean_squared_error_metric(target, pred):
+    target = torch.tensor(target) if not torch.is_tensor(target) else target
+    pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+    return torch.nn.functional.mse_loss(target, pred)
+
+def mean_absolute_error_metric(target, pred):
+    target = torch.tensor(target) if not torch.is_tensor(target) else target
+    pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+    return torch.tensor(mean_absolute_error(target, pred))
 
 """
 ===============================
@@ -37,7 +52,7 @@ def auc_metric(target, pred, multi_class='ovo', numpy=False):
             return roc_auc_score(target, pred)
     except ValueError as e:
         print(e)
-        return np.nan
+        return np.nan if numpy else torch.tensor(np.nan)
 
 def accuracy_metric(target, pred):
     target = torch.tensor(target) if not torch.is_tensor(target) else target
@@ -73,6 +88,19 @@ def cross_entropy(target, pred):
         bce = torch.nn.BCELoss()
         return bce(pred[:, 1].float(), target.float())
 
+def r2_metric(target, pred):
+    target = torch.tensor(target) if not torch.is_tensor(target) else target
+    pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+    return torch.tensor(neg_r2(target, pred))
+
+def neg_r2(target, pred):
+    return -r2_score(pred.float(), target.float())
+
+def is_classification(metric_used):
+    if metric_used == auc_metric or metric_used == cross_entropy:
+        return True
+    return False
+
 def time_metric():
     """
     Dummy function, will just be used as a handler.
@@ -90,7 +118,7 @@ def count_metric(x, y):
 Metrics composition
 ===============================
 """
-def calculate_score_per_method(metric, name:str, global_results:dict, ds:list, eval_positions:list, aggregator:str='mean'):
+def calculate_score_per_method(metric, name:str, global_results:dict, ds:list, eval_positions:list[int], aggregator:str='mean'):
     """
     Calculates the metric given by 'metric' and saves it under 'name' in the 'global_results'
 
@@ -156,15 +184,18 @@ def calculate_score(metric, name, global_results, ds, eval_positions, aggregator
 def make_metric_matrix(global_results, methods, pos, name, ds):
     result = []
     for m in global_results:
-        result += [[global_results[m][d[0] + '_' + name + '_at_' + str(pos)] for d in ds]]
+        try:
+            result += [[global_results[m][d[0] + '_' + name + '_at_' + str(pos)] for d in ds]]
+        except Exception as e:
+            result += [[np.nan]]
     result = np.array(result)
-    result = pd.DataFrame(result.T, index=[d[0] for d in ds], columns=[k[:-8] for k in list(global_results.keys())])
+    result = pd.DataFrame(result.T, index=[d[0] for d in ds], columns=[k for k in list(global_results.keys())])
 
     matrix_means, matrix_stds = [], []
 
     for method in methods:
-        matrix_means += [result.iloc[:, [(method) in c for c in result.columns]].mean(axis=1)]
-        matrix_stds += [result.iloc[:, [(method) in c for c in result.columns]].std(axis=1)]
+        matrix_means += [result.iloc[:, [c.startswith(method+'_time') for c in result.columns]].mean(axis=1)]
+        matrix_stds += [result.iloc[:, [c.startswith(method+'_time') for c in result.columns]].std(axis=1)]
 
     matrix_means = pd.DataFrame(matrix_means, index=methods).T
     matrix_stds = pd.DataFrame(matrix_stds, index=methods).T
