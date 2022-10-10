@@ -259,9 +259,8 @@ class TabPFNModel(AbstractModel):
              # time_limit=None,  # time limit in seconds (ignored in tutorial)
              **kwargs):  # kwargs includes many other potential inputs, refer to AbstractModel documentation for details
 
-        self.model = TabPFNClassifier(device='cpu', base_path='/work/dlclarge1/hollmann-PFN_Tabular/',
-                                      model_string='_longer_multiclass_causal_05_02_2022_12_49_44_sams',
-                                      N_ensemble_configurations=10)
+        self.model = TabPFNClassifier(device='cpu', base_path='.',
+                                      N_ensemble_configurations=32)
         self.model.fit(X.to_numpy(), y.to_numpy())
 
     def _predict_proba(self, X, **kwargs):
