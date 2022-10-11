@@ -62,7 +62,13 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
     def check_file(e):
         model_file, model_path, results_file = get_file(e)
         if not Path(model_path).is_file():  # or Path(results_file).is_file():
-            return None, None, None
+            print('We have to download the TabPFN, as there is no checkpoint at ', model_path)
+            print('It has about 100MB, so this might take a moment.')
+            import requests
+            url = 'https://github.com/automl/TabPFN/raw/main/tabpfn/models_diff/prior_diff_real_checkpoint_n_0_epoch_42.cpkt'
+            r = requests.get(url, allow_redirects=True)
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            open(model_path, 'wb').write(r.content)
         return model_file, model_path, results_file
 
     model_file = None
@@ -95,8 +101,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
 
-        # File which contains result of hyperparameter tuning run: style (i.e. hyperparameters) and a dataframe with results.
-        #style_file = 'prior_tuning_result.pkl'
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
                                                      eval_addition='')
