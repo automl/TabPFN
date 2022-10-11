@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 from .utils import get_batch_to_dataloader
-from utils import normalize_data, nan_handling_missing_for_unknown_reason_value, nan_handling_missing_for_no_reason_value, nan_handling_missing_for_a_reason_value, to_ranking_low_mem, remove_outliers
+from tabpfn.utils import normalize_data, nan_handling_missing_for_unknown_reason_value, nan_handling_missing_for_no_reason_value, nan_handling_missing_for_a_reason_value, to_ranking_low_mem, remove_outliers
 from .utils import normalize_by_used_features_f, randomize_classes, CategoricalActivation
 from .utils import uniform_int_sampler_f
 

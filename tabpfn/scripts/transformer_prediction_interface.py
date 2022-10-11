@@ -1,11 +1,12 @@
 import torch
 import random
+import pathlib
 
 from torch.utils.checkpoint import checkpoint
 
-from utils import normalize_data, to_ranking_low_mem, remove_outliers
-from priors.utils import normalize_by_used_features_f
-from utils import NOP
+from tabpfn.utils import normalize_data, to_ranking_low_mem, remove_outliers
+from tabpfn.priors.utils import normalize_by_used_features_f
+from tabpfn.utils import NOP
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 
@@ -16,7 +17,7 @@ from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
 from pathlib import Path
-from scripts.model_builder import load_model
+from tabpfn.scripts.model_builder import load_model
 import os
 import pickle
 import io
@@ -86,9 +87,10 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
     return model, c, results_file
 
+
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self, device='cpu', base_path='.', model_string='', i=0, N_ensemble_configurations=32
+    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=32
                  , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
@@ -107,6 +109,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.temperature = None
         self.N_ensemble_configurations = N_ensemble_configurations
         self.base__path = base_path
+        self.base_path = base_path
+        self.i = i
         self.model_string = model_string
 
         self.max_num_features = self.c['num_features']

@@ -23,10 +23,10 @@ from sklearn.gaussian_process.kernels import RBF
 import numpy as np
 import torch
 import itertools
-from scripts import tabular_metrics
+from tabpfn.scripts import tabular_metrics
 import pandas as pd
 from tqdm import tqdm
-from utils import remove_outliers
+from tabpfn.utils import remove_outliers
 
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.model_selection import cross_val_score

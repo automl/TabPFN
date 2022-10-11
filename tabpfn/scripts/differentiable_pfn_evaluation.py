@@ -3,16 +3,13 @@ import torch
 import numpy as np
 import time
 import pickle
-from scripts import  tabular_metrics
-from scripts.tabular_metrics import calculate_score_per_method
-from scripts.tabular_evaluation import evaluate
-from priors.differentiable_prior import draw_random_style
+from tabpfn.scripts import  tabular_metrics
+from tabpfn.scripts.tabular_metrics import calculate_score_per_method
+from tabpfn.scripts.tabular_evaluation import evaluate
 from tqdm import tqdm
-from pathlib import Path
 import random
-from scripts.model_builder import load_model
-from scripts.transformer_prediction_interface import get_params_from_config
-from scripts.transformer_prediction_interface import load_model_workflow
+from tabpfn.scripts.transformer_prediction_interface import get_params_from_config
+from tabpfn.scripts.transformer_prediction_interface import load_model_workflow
 
 """
 ===============================

@@ -1,13 +1,10 @@
 from functools import partial
-from train import train, Losses
-import priors
-import encoders
+from tabpfn.train import train, Losses
+import tabpfn.priors as priors
+import tabpfn.encoders as encoders
 
-from priors.utils import trunc_norm_sampler_f, gamma_sampler_f
-from collections import defaultdict
-
-from priors.utils import trunc_norm_sampler_f, gamma_sampler_f
-from utils import get_uniform_single_eval_pos_sampler
+from tabpfn.priors.utils import trunc_norm_sampler_f, gamma_sampler_f
+from tabpfn.utils import get_uniform_single_eval_pos_sampler
 import torch
 import math
 

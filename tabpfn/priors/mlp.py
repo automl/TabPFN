@@ -5,7 +5,7 @@ import torch
 from torch import nn
 import numpy as np
 
-from utils import default_device
+from tabpfn.utils import default_device
 from .utils import get_batch_to_dataloader
 
 class GaussianNoise(nn.Module):

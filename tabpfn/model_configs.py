@@ -1,9 +1,9 @@
 from copy import deepcopy
-from priors.utils import uniform_int_sampler_f
-from priors.differentiable_prior import DifferentiableHyperparameter
+from tabpfn.priors.utils import uniform_int_sampler_f
+from tabpfn.priors.differentiable_prior import DifferentiableHyperparameter
 from ConfigSpace import hyperparameters as CSH
 import torch
-from priors.differentiable_prior import replace_differentiable_distributions
+from tabpfn.priors.differentiable_prior import replace_differentiable_distributions
 
 import ConfigSpace as CS
 
