@@ -3,7 +3,7 @@
 The TabPFN is a neural network that learned to do tabular data prediction.
 This is the original CUDA-supporting pytorch impelementation.
 
-We created a [Colab](https://colab.research.google.com/drive/194mCs6SEPEW6C0rcP7xWzcEtt1RBc8jJ#scrollTo=N8mEqwDWHD5S), that lets you play with our scikit-learn interface.
+We created a [Colab](https://colab.research.google.com/drive/194mCs6SEPEW6C0rcP7xWzcEtt1RBc8jJ), that lets you play with our scikit-learn interface.
 
 We also created two demos. One to experiment with the TabPFNs predictions (https://huggingface.co/spaces/TabPFN/TabPFNPrediction) and one to check cross-
 validation ROC AUC scores on new datasets (https://huggingface.co/spaces/TabPFN/TabPFNEvaluation). Both of them run on a weak CPU, thus it can require a little bit of time.
