@@ -1040,7 +1040,7 @@ def logistic_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         rstate=np.random.default_rng(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=10000)
+        max_evals=1000)
     best = space_eval(param_grid_hyperopt['logistic'], best)
 
     clf = clf_(**best)
@@ -1076,7 +1076,7 @@ def knn_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
         rstate=np.random.default_rng(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=10000)
+        max_evals=200)
     best = space_eval(param_grid_hyperopt['knn'], best)
 
     clf = clf_(**best)
