@@ -96,7 +96,7 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=5
+    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=3
                  , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
