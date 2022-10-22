@@ -61,7 +61,7 @@ def is_classification(metric_used):
 # Loss
 
 def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
-    if metric_used == tabular_metrics.auc_metric:
+    if metric_used.__name__ == tabular_metrics.auc_metric.__name__:
         if usage == 'sklearn_cv':
             return 'roc_auc_ovo'
         elif usage == 'autogluon':
@@ -89,7 +89,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
             else:
                 return 'binary'
         return 'roc_auc'
-    elif metric_used == tabular_metrics.cross_entropy:
+    elif metric_used.__name__ == tabular_metrics.cross_entropy.__name__:
         if usage == 'sklearn_cv':
             return 'neg_log_loss'
         elif usage == 'autogluon':
@@ -101,7 +101,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
         elif usage == 'catboost':
             return 'MultiClass' # Effectively LogLoss
         return 'logloss'
-    elif metric_used == tabular_metrics.r2_metric:
+    elif metric_used.__name__ == tabular_metrics.r2_metric.__name__:
         if usage == 'autosklearn':
             return autosklearn.metrics.r2
         elif usage == 'sklearn_cv':
@@ -114,7 +114,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
             return 'RMSE'
         else:
             return 'r2'
-    elif metric_used == tabular_metrics.root_mean_squared_error_metric:
+    elif metric_used.__name__ == tabular_metrics.root_mean_squared_error_metric.__name__:
         if usage == 'autosklearn':
             return autosklearn.metrics.root_mean_squared_error
         elif usage == 'sklearn_cv':
@@ -127,7 +127,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
             return 'RMSE'
         else:
             return 'neg_root_mean_squared_error'
-    elif metric_used == tabular_metrics.mean_absolute_error_metric:
+    elif metric_used.__name__ == tabular_metrics.mean_absolute_error_metric.__name__:
         if usage == 'autosklearn':
             return autosklearn.metrics.mean_absolute_error
         elif usage == 'sklearn_cv':
