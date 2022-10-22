@@ -21,6 +21,8 @@ from sklearn import neighbors
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
 import numpy as np
+np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning) 
+
 import torch
 import itertools
 from tabpfn.scripts import tabular_metrics
@@ -185,11 +187,11 @@ def preprocess_impute(x, y, test_x, test_y, impute, one_hot, standardize, cat_fe
 import torch
 import random
 from tqdm import tqdm
-def transformer_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+def transformer_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, device='cpu', N_ensemble_configurations=3, classifier=None):
     from tabpfn.scripts.transformer_prediction_interface import TabPFNClassifier
 
-    classifier = TabPFNClassifier(device='cpu', base_path='.',
-                                  model_string='')
+    if classifier is None:
+      classifier = TabPFNClassifier(device=device, N_ensemble_configurations=N_ensemble_configurations)
     classifier.fit(x, y)
     print('Train data shape', x.shape, ' Test data shape', test_x.shape)
     pred = classifier.predict_proba(test_x)
