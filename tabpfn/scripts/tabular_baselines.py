@@ -45,17 +45,17 @@ param_grid, param_grid_hyperopt = {}, {}
 
 def get_scoring_direction(metric_used):
     # Not needed
-    if metric_used == tabular_metrics.auc_metric:
+    if metric_used.__name__ == tabular_metrics.auc_metric.__name__:
         return -1
-    elif metric_used == tabular_metrics.cross_entropy:
+    elif metric_used.__name__ == tabular_metrics.cross_entropy.__name__:
         return 1
     else:
         raise Exception('No scoring string found for metric')
 
 def is_classification(metric_used):
-    if metric_used == tabular_metrics.auc_metric or metric_used == tabular_metrics.cross_entropy:
+    if metric_used.__name__ == tabular_metrics.auc_metric.__name__ or metric_used.__name__ == tabular_metrics.cross_entropy.__name__:
         return 'classification'
-    elif metric_used == tabular_metrics.auc_metric:
+    elif metric_used.__name__ == tabular_metrics.auc_metric.__name__:
         return -1
 
 # Loss
