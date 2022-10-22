@@ -931,10 +931,10 @@ def ridge_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
 
     return metric, pred, best
 
-from lightautoml.automl.presets.tabular_presets import TabularAutoML, TabularUtilizedAutoML
-from lightautoml.tasks import Task
-
 def lightautoml_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+    from lightautoml.automl.presets.tabular_presets import TabularAutoML, TabularUtilizedAutoML
+    from lightautoml.tasks import Task
+    
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False, impute=False, standardize=False
                                              , cat_features=cat_features)
