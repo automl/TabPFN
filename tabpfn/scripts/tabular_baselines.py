@@ -1432,6 +1432,7 @@ clf_dict = {'gp': gp_metric
                 , 'catboost': catboost_metric
                 , 'tabnet': tabnet_metric
                 , 'xgb': xgb_metric
+                , 'lightgbm': lightgbm_metric
             , 'ridge': ridge_metric
                 , 'logistic': logistic_metric
            , 'autosklearn': autosklearn_metric
