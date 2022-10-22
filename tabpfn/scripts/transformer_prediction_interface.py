@@ -159,7 +159,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y):
         # Check that X and y have correct shape
-        # X, y = check_X_y(X, y)
+        X, y = check_X_y(X, y, force_all_finite=False)
         # Store the classes seen during fit
         y = self._validate_targets(y)
 
@@ -181,7 +181,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         check_is_fitted(self)
 
         # Input validation
-        # X = check_array(X)
+        X = check_array(X, force_all_finite=False)
         X_full = np.concatenate([self.X_, X], axis=0)
         X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
         y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
