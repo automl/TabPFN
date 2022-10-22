@@ -118,7 +118,7 @@ def count_metric(x, y):
 Metrics composition
 ===============================
 """
-def calculate_score_per_method(metric, name:str, global_results:dict, ds:list, eval_positions:list[int], aggregator:str='mean'):
+def calculate_score_per_method(metric, name:str, global_results:dict, ds:list, eval_positions:list, aggregator:str='mean'):
     """
     Calculates the metric given by 'metric' and saves it under 'name' in the 'global_results'
 
