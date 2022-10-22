@@ -186,7 +186,7 @@ import torch
 import random
 from tqdm import tqdm
 def transformer_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
-    from scripts.transformer_prediction_interface import TabPFNClassifier
+    from tabpfn.scripts.transformer_prediction_interface import TabPFNClassifier
 
     classifier = TabPFNClassifier(device='cpu', base_path='.',
                                   model_string='')
@@ -1427,6 +1427,7 @@ def mlp_acc(x, y, test_x, test_y, hyperparameters):
     return acc
 
 clf_dict = {'gp': gp_metric
+, 'transformer': transformer_metric
                 , 'knn': knn_metric
                 , 'catboost': catboost_metric
                 , 'tabnet': tabnet_metric
