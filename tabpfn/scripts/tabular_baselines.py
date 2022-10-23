@@ -40,7 +40,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import MinMaxScaler
 
 CV = 5
-MULTITHREAD = 1 # Number of threads baselines are able to use at most
+MULTITHREAD = -1 # Number of threads baselines are able to use at most
 param_grid, param_grid_hyperopt = {}, {}
 
 def get_scoring_direction(metric_used):
@@ -1031,7 +1031,7 @@ def logistic_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
                                              , cat_features=cat_features)
 
     def clf_(**params):
-        return LogisticRegression(solver='saga', tol=1e-4, n_jobs=1, **params)
+        return LogisticRegression(solver='saga', tol=1e-4, n_jobs=MULTITHREAD, **params)
 
     start_time = time.time()
 
@@ -1056,6 +1056,52 @@ def logistic_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
 
     return metric, pred, best
 
+
+## Random Forest
+# Search space from
+# https://www.kaggle.com/code/emanueleamcappella/random-forest-hyperparameters-tuning/notebook
+param_grid_hyperopt['random_forest'] = {'n_estimators': hp.randint('n_estimators', 20, 200),
+               'max_features': hp.choice('max_features', ['auto', 'sqrt']),
+               'max_depth': hp.randint('max_depth', 1, 45),
+               'min_samples_split': hp.choice('min_samples_split', [5, 10])}
+def random_forest_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+    from sklearn.ensemble import RandomForestClassifier
+
+    x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y,
+                                             one_hot=False, impute=True, standardize=False,
+                                             cat_features=cat_features)
+
+    def clf_(**params):
+        if is_classification(metric_used):
+            return RandomForestClassifier(n_jobs=MULTITHREAD, **params)
+        return RandomForestClassifier(n_jobs=MULTITHREAD, **params)
+
+    start_time = time.time()
+
+    def stop(trial):
+        return time.time() - start_time > max_time, []
+
+    best = fmin(
+        fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+        space=param_grid_hyperopt['random_forest'],
+        algo=rand.suggest,
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+        early_stop_fn=stop,
+        # The seed is deterministic but varies for each dataset and each split of it
+        max_evals=10000)
+    best = space_eval(param_grid_hyperopt['random_forest'], best)
+
+    clf = clf_(**best)
+    clf.fit(x, y)
+
+    if is_classification(metric_used):
+        pred = clf.predict_proba(test_x)
+    else:
+        pred = clf.predict(test_x)
+    metric = metric_used(test_y, pred)
+
+    return metric, pred, best
+
 ## KNN
 param_grid_hyperopt['knn'] = {'n_neighbors': hp.randint('n_neighbors', 1,16)
                               }
@@ -1066,8 +1112,8 @@ def knn_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
 
     def clf_(**params):
         if is_classification(metric_used):
-            return neighbors.KNeighborsClassifier(n_jobs=1, **params)
-        return neighbors.KNeighborsRegressor(n_jobs=1, **params)
+            return neighbors.KNeighborsClassifier(n_jobs=MULTITHREAD, **params)
+        return neighbors.KNeighborsRegressor(n_jobs=MULTITHREAD, **params)
 
     start_time = time.time()
 
@@ -1373,7 +1419,7 @@ def ridge_metric(x, y, test_x, test_y, cat_features, metric_used):
     x, y, test_x, test_y = x.cpu(), y.cpu(), test_x.cpu(), test_y.cpu()
     x, test_x = torch.nan_to_num(x), torch.nan_to_num(test_x)
 
-    clf = RidgeClassifier(n_jobs=1)
+    clf = RidgeClassifier(n_jobs=MULTITHREAD)
 
     # create a dictionary of all values we want to test for n_neighbors
     # use gridsearch to test all values for n_neighbors
@@ -1433,6 +1479,7 @@ def mlp_acc(x, y, test_x, test_y, hyperparameters):
 
 clf_dict = {'gp': gp_metric
 , 'transformer': transformer_metric
+, 'random_forest': random_forest_metric
                 , 'knn': knn_metric
                 , 'catboost': catboost_metric
                 , 'tabnet': tabnet_metric
