@@ -87,7 +87,7 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
         raise Exception('No checkpoint found at '+str(model_path))
 
 
-    print(f'Loading {model_file}')
+    #print(f'Loading {model_file}')
 
     model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
 
