@@ -39,8 +39,6 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import MinMaxScaler
 
-import autosklearn.classification
-
 CV = 5
 MULTITHREAD = 1 # Number of threads baselines are able to use at most
 param_grid, param_grid_hyperopt = {}, {}
@@ -77,6 +75,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
         elif usage == 'tabnet':
             return 'logloss' if multiclass else 'auc'
         elif usage == 'autosklearn':
+            import autosklearn.classification
             if multiclass:
                 return autosklearn.metrics.log_loss # roc_auc only works for binary, use logloss instead
             else:
@@ -99,12 +98,14 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
         elif usage == 'tabnet':
             return 'logloss'
         elif usage == 'autosklearn':
+            import autosklearn.classification
             return autosklearn.metrics.log_loss
         elif usage == 'catboost':
             return 'MultiClass' # Effectively LogLoss
         return 'logloss'
     elif metric_used.__name__ == tabular_metrics.r2_metric.__name__:
         if usage == 'autosklearn':
+            import autosklearn.classification
             return autosklearn.metrics.r2
         elif usage == 'sklearn_cv':
             return 'r2' # tabular_metrics.neg_r2
@@ -118,6 +119,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
             return 'r2'
     elif metric_used.__name__ == tabular_metrics.root_mean_squared_error_metric.__name__:
         if usage == 'autosklearn':
+            import autosklearn.classification
             return autosklearn.metrics.root_mean_squared_error
         elif usage == 'sklearn_cv':
             return 'neg_root_mean_squared_error' # tabular_metrics.neg_r2
@@ -131,6 +133,7 @@ def get_scoring_string(metric_used, multiclass=True, usage="sklearn_cv"):
             return 'neg_root_mean_squared_error'
     elif metric_used.__name__ == tabular_metrics.mean_absolute_error_metric.__name__:
         if usage == 'autosklearn':
+            import autosklearn.classification
             return autosklearn.metrics.mean_absolute_error
         elif usage == 'sklearn_cv':
             return 'neg_mean_absolute_error' # tabular_metrics.neg_r2
