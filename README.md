@@ -19,7 +19,7 @@ If you want to evaluate our baselines, too, please install with
 ```bash
 pip install tabpfn[baselines]
 ```
-To run the autogluon baseline please create a separate environment and install autogluon==0.4.0, installation in the same environment as our other baselines is not possible.
+To run the autogluon and autosklearn baseline please create a separate environment and install autosklearn / autogluon==0.4.0, installation in the same environment as our other baselines is not possible.
 
 ## Getting started
 
