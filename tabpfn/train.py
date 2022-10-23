@@ -51,8 +51,9 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     dl = priordataloader_class(num_steps=steps_per_epoch, batch_size=batch_size, eval_pos_seq_len_sampler=eval_pos_seq_len_sampler, seq_len_maximum=bptt+(bptt_extra_samples if bptt_extra_samples else 0), device=device, **extra_prior_kwargs_dict)
 
     encoder = encoder_generator(dl.num_features, emsize)
-    style_def = dl.get_test_batch()[0][0] # the style in batch of the form ((style, x, y), target, single_eval_pos)
-    print(f'Style definition of first 3 examples: {style_def[:3] if style_def is not None else None}')
+    #style_def = dl.get_test_batch()[0][0] # the style in batch of the form ((style, x, y), target, single_eval_pos)
+    style_def = None
+    #print(f'Style definition of first 3 examples: {style_def[:3] if style_def is not None else None}')
     style_encoder = style_encoder_generator(style_def.shape[1], emsize) if (style_def is not None) else None
     if isinstance(criterion, nn.GaussianNLLLoss):
         n_out = 2
