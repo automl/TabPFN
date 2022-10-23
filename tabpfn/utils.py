@@ -236,7 +236,7 @@ def print_on_master_only(is_master):
 
 
 def init_dist(device):
-    print('init dist')
+    #print('init dist')
     if 'LOCAL_RANK' in os.environ:
         # launched with torch.distributed.launch
         rank = int(os.environ["LOCAL_RANK"])
@@ -268,7 +268,7 @@ def init_dist(device):
 
         return True, rank, f'cuda:{rank}'
     else:
-        print('Not using distributed')
+        #print('Not using distributed')
         # will not change any of the behavior of print, but allows putting the force=True in the print calls
         print_on_master_only(True)
         return False, 0, device
