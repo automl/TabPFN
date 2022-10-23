@@ -922,7 +922,7 @@ def ridge_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['ridge'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=10000)
@@ -1004,7 +1004,7 @@ def lightgbm_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['lightgbm'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=10000)
@@ -1042,7 +1042,7 @@ def logistic_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['logistic'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=1000)
@@ -1078,7 +1078,7 @@ def knn_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['knn'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=200)
@@ -1120,7 +1120,7 @@ def gp_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['gp'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=1000)
@@ -1195,7 +1195,7 @@ def tabnet_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300)
         fn=lambda params: tabnet_eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['tabnet'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         max_evals=1000)
     best = space_eval(param_grid_hyperopt['tabnet'], best)
@@ -1273,7 +1273,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['catboost'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=1000)
@@ -1339,7 +1339,7 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
         fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
         space=param_grid_hyperopt['xgb'],
         algo=rand.suggest,
-        rstate=np.random.default_rng(int(y[:].sum()) % 10000),
+        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
         early_stop_fn=stop,
         # The seed is deterministic but varies for each dataset and each split of it
         max_evals=1000)
