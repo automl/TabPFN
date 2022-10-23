@@ -42,7 +42,7 @@ def get_gpu_memory():
 
 def load_model(path, filename, device, eval_positions, verbose):
     # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
-    print('Loading....')
+    # print('Loading....')
     model_state, optimizer_state, config_sample = torch.load(
         os.path.join(path, filename), map_location='cpu')
     if ('differentiable_hyperparameters' in config_sample
@@ -238,7 +238,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
     config['eval_positions'] = [int(config['bptt'] * 0.95)] if config['bptt_extra_samples'] is None else [int(config['bptt'])]
 
     epochs = 0 if not should_train else config['epochs']
-    print('MODEL BUILDER', model_proto, extra_kwargs['get_batch'])
+    #print('MODEL BUILDER', model_proto, extra_kwargs['get_batch'])
     model = train(model_proto.DataLoader
                   , loss
                   , encoder
