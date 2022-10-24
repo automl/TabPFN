@@ -3,6 +3,7 @@ from tabpfn.train import train, Losses
 import tabpfn.priors as priors
 import tabpfn.encoders as encoders
 
+from typing import Callable
 from tabpfn.priors.utils import trunc_norm_sampler_f, gamma_sampler_f
 from tabpfn.utils import get_uniform_single_eval_pos_sampler
 import torch
@@ -40,6 +41,29 @@ def get_gpu_memory():
     return memory_free_info
 
 
+def __categorical_features_sampler_constructor() -> Callable:
+    """
+    Helper function allowing model to be pickled
+
+    Returns:
+        int: number of features
+    """
+
+    def call(x):
+        ([], [], [])
+
+
+def __num_features_used_constructor() -> int:
+    """
+    Helper function allowing model to be pickled
+
+    Returns:
+        int: number of features
+    """
+
+    return config_sample['num_features']
+
+
 def load_model(path, filename, device, eval_positions, verbose):
     # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
     # print('Loading....')
@@ -54,9 +78,9 @@ def load_model(path, filename, device, eval_positions, verbose):
         config_sample['differentiable_hyperparameters']['prior_mlp_activations']['choice_values'] = [
             torch.nn.Tanh for k in config_sample['differentiable_hyperparameters']['prior_mlp_activations']['choice_values']]
 
-    config_sample['categorical_features_sampler'] = lambda: lambda x: ([], [], [])
+    config_sample['categorical_features_sampler'] = __categorical_features_sampler_constructor
     config_sample['num_features_used_in_training'] = config_sample['num_features_used']
-    config_sample['num_features_used'] = lambda: config_sample['num_features']
+    config_sample['num_features_used'] = __num_features_used_constructor
     config_sample['num_classes_in_training'] = config_sample['num_classes']
     config_sample['num_classes'] = 2
     config_sample['batch_size_in_training'] = config_sample['batch_size']
