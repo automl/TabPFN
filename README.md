@@ -57,7 +57,7 @@ If you use our method, please cite us using
 }
 ```
 
-### License
+## License
 
 Copyright 2022 Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter
 
