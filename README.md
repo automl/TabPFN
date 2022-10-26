@@ -39,8 +39,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random
 
 classifier = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
 
-# By setting normalize_with_test to True, input normalization is applied across train + test set (weak transductive setting). [default = False]
-classifier.fit(X_train, y_train, normalize_with_test=False)
+classifier.fit(X_train, y_train)
 y_eval, p_eval = classifier.predict(X_test, return_winning_probability=True)
 
 print('Accuracy', accuracy_score(y_test, y_eval))
