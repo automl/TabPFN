@@ -1,0 +1,1 @@
+Copyright 2022 Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter
