@@ -61,8 +61,8 @@ If you use our method, please cite us using
 }
 ```
 
-### License
-Copyright 2022 Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank hutter
+## License
+Copyright 2022 Noah Hollmann, Samuel Müller, Katharina Eggensperger, Frank Hutter
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
