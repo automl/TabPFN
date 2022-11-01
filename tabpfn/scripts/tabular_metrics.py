@@ -62,6 +62,20 @@ def accuracy_metric(target, pred):
     else:
         return torch.tensor(accuracy_score(target, pred[:, 1] > 0.5))
 
+def brier_score_metric(target, pred):
+    target = torch.tensor(target) if not torch.is_tensor(target) else target
+    target = torch.nn.functional.one_hot(target, num_classes=len(torch.unique(target)))
+    pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+    diffs = (pred - target)**2
+    return torch.mean(torch.sum(diffs, axis=1))
+
+def ece_metric(target, pred):
+  import torchmetrics
+  target = torch.tensor(target) if not torch.is_tensor(target) else target
+  pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
+  return torchmetrics.functional.calibration_error(pred, target)
+
+
 def average_precision_metric(target, pred):
     target = torch.tensor(target) if not torch.is_tensor(target) else target
     pred = torch.tensor(pred) if not torch.is_tensor(pred) else pred
