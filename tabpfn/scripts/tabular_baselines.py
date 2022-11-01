@@ -7,6 +7,7 @@ from sklearn.model_selection import ParameterGrid
 import tempfile
 import random
 import math
+import sklearn
 import os
 #from pytorch_tabnet.tab_model import TabNetClassifier, TabNetRegressor
 from sklearn import preprocessing
@@ -986,7 +987,7 @@ param_grid_hyperopt['lightgbm'] = {
 
 from lightgbm import LGBMClassifier
 
-def lightgbm_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+def lightgbm_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False, impute=False, standardize=False
                                              , cat_features=cat_features)
@@ -1000,15 +1001,18 @@ def lightgbm_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
     def stop(trial):
         return time.time() - start_time > max_time, []
 
-    best = fmin(
-        fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
-        space=param_grid_hyperopt['lightgbm'],
-        algo=rand.suggest,
-        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
-        early_stop_fn=stop,
-        # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=10000)
-    best = space_eval(param_grid_hyperopt['lightgbm'], best)
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['lightgbm'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=10000)
+      best = space_eval(param_grid_hyperopt['lightgbm'], best)
+    else:
+      best = no_tune
 
     clf = clf_(**best)
     clf.fit(x, y)
@@ -1064,7 +1068,7 @@ param_grid_hyperopt['random_forest'] = {'n_estimators': hp.randint('n_estimators
                'max_features': hp.choice('max_features', ['auto', 'sqrt']),
                'max_depth': hp.randint('max_depth', 1, 45),
                'min_samples_split': hp.choice('min_samples_split', [5, 10])}
-def random_forest_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+def random_forest_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
     from sklearn.ensemble import RandomForestClassifier
 
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y,
@@ -1081,15 +1085,101 @@ def random_forest_metric(x, y, test_x, test_y, cat_features, metric_used, max_ti
     def stop(trial):
         return time.time() - start_time > max_time, []
 
-    best = fmin(
-        fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
-        space=param_grid_hyperopt['random_forest'],
-        algo=rand.suggest,
-        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
-        early_stop_fn=stop,
-        # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=10000)
-    best = space_eval(param_grid_hyperopt['random_forest'], best)
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['random_forest'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=10000)
+      best = space_eval(param_grid_hyperopt['random_forest'], best)
+    else:
+      best = no_tune
+
+    clf = clf_(**best)
+    clf.fit(x, y)
+
+    if is_classification(metric_used):
+        pred = clf.predict_proba(test_x)
+    else:
+        pred = clf.predict(test_x)
+    metric = metric_used(test_y, pred)
+
+    return metric, pred, best
+
+## Gradient Boosting
+param_grid_hyperopt['gradient_boosting'] = {}
+def gradient_boosting_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
+    from sklearn import ensemble
+    x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y,
+                                             one_hot=True, impute=True, standardize=True,
+                                             cat_features=cat_features)
+
+    def clf_(**params):
+        if is_classification(metric_used):
+            return ensemble.GradientBoostingClassifier(**params)
+        return ensemble.GradientBoosting(**params)
+
+    start_time = time.time()
+
+    def stop(trial):
+        return time.time() - start_time > max_time, []
+
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['gradient_boosting'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=10000)
+      best = space_eval(param_grid_hyperopt['gradient_boosting'], best)
+    else:
+      best = no_tune
+
+    clf = clf_(**best)
+    clf.fit(x, y)
+
+    if is_classification(metric_used):
+        pred = clf.predict_proba(test_x)
+    else:
+        pred = clf.predict(test_x)
+    metric = metric_used(test_y, pred)
+
+    return metric, pred, best
+
+## SVM
+param_grid_hyperopt['svm'] = {'C': [0.1,1, 10, 100], 'gamma': [1,0.1,0.01,0.001],'kernel': ['rbf', 'poly', 'sigmoid']}
+def svm_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
+    x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y,
+                                             one_hot=True, impute=True, standardize=True,
+                                             cat_features=cat_features)
+
+    def clf_(**params):
+        if is_classification(metric_used):
+            return sklearn.svm.SVC(probability=True, **params)
+        return sklearn.svm.SVR(**params)
+
+    start_time = time.time()
+
+    def stop(trial):
+        return time.time() - start_time > max_time, []
+
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['svm'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=10000)
+      best = space_eval(param_grid_hyperopt['svm'], best)
+    else:
+      best = no_tune
 
     clf = clf_(**best)
     clf.fit(x, y)
@@ -1146,31 +1236,34 @@ param_grid_hyperopt['gp'] = {
     'params_y_scale': hp.loguniform('params_y_scale', math.log(0.05), math.log(5.0)),
     'params_length_scale': hp.loguniform('params_length_scale', math.log(0.1), math.log(1.0))
 }
-def gp_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+def gp_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y,
                                              one_hot=True, impute=True, standardize=True,
                                              cat_features=cat_features)
 
-    def clf_(params_y_scale,params_length_scale, **params):
+    def clf_(params_y_scale=None,params_length_scale=None, **params):
+        kernel = params_y_scale * RBF(params_length_scale) if params_length_scale is not None else None
         if is_classification(metric_used):
-            return GaussianProcessClassifier(kernel= params_y_scale * RBF(params_length_scale), **params)
+            return GaussianProcessClassifier(kernel=kernel, **params)
         else:
-            return GaussianProcessRegressor(kernel= params_y_scale * RBF(params_length_scale), **params)
+            return GaussianProcessRegressor(kernel=kernel, **params)
 
     start_time = time.time()
     def stop(trial):
         return time.time() - start_time > max_time, []
 
-
-    best = fmin(
-        fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
-        space=param_grid_hyperopt['gp'],
-        algo=rand.suggest,
-        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
-        early_stop_fn=stop,
-        # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=1000)
-    best = space_eval(param_grid_hyperopt['gp'], best)
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['gp'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=1000)
+      best = space_eval(param_grid_hyperopt['gp'], best)
+    else:
+      best = no_tune
 
     clf = clf_(**best)
     clf.fit(x, y)
@@ -1351,7 +1444,7 @@ param_grid_hyperopt['xgb'] = {
     'n_estimators': hp.randint('n_estimators', 100, 4000), # This is smaller than in paper
 }
 
-def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
+def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
     import xgboost as xgb
     # XGB Documentation:
     # XGB handles categorical data appropriately without using One Hot Encoding, categorical features are experimetal
@@ -1381,15 +1474,18 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300):
     def stop(trial):
         return time.time() - start_time > max_time, []
 
-    best = fmin(
-        fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
-        space=param_grid_hyperopt['xgb'],
-        algo=rand.suggest,
-        rstate=np.random.RandomState(int(y[:].sum()) % 10000),
-        early_stop_fn=stop,
-        # The seed is deterministic but varies for each dataset and each split of it
-        max_evals=1000)
-    best = space_eval(param_grid_hyperopt['xgb'], best)
+    if no_tune is None:
+      best = fmin(
+          fn=lambda params: eval_f(params, clf_, x, y, metric_used, start_time, max_time),
+          space=param_grid_hyperopt['xgb'],
+          algo=rand.suggest,
+          rstate=np.random.RandomState(int(y[:].sum()) % 10000),
+          early_stop_fn=stop,
+          # The seed is deterministic but varies for each dataset and each split of it
+          max_evals=1000)
+      best = space_eval(param_grid_hyperopt['xgb'], best)
+    else:
+      best=no_tune
 
     clf = clf_(**best)
     clf.fit(x, y)
