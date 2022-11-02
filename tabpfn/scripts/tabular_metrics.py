@@ -198,10 +198,11 @@ def calculate_score(metric, name, global_results, ds, eval_positions, aggregator
 def make_metric_matrix(global_results, methods, pos, name, ds):
     result = []
     for m in global_results:
-        try:
-            result += [[global_results[m][d[0] + '_' + name + '_at_' + str(pos)] for d in ds]]
-        except Exception as e:
-            result += [[np.nan for d in ds]]
+        r = []
+        for d in ds:
+          k = d[0] + '_' + name + '_at_' + str(pos)
+          r += [global_results[m][k]] if k in global_results[m] else [np.nan]
+        result += [r]
     result = np.array(result)
     result = pd.DataFrame(result.T, index=[d[0] for d in ds], columns=[k for k in list(global_results.keys())])
 
