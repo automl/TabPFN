@@ -201,20 +201,21 @@ def make_metric_matrix(global_results, methods, pos, name, ds):
         try:
             result += [[global_results[m][d[0] + '_' + name + '_at_' + str(pos)] for d in ds]]
         except Exception as e:
-            result += [[np.nan]]
+            result += [[np.nan for d in ds]]
     result = np.array(result)
     result = pd.DataFrame(result.T, index=[d[0] for d in ds], columns=[k for k in list(global_results.keys())])
 
-    matrix_means, matrix_stds = [], []
+    matrix_means, matrix_stds, matrix_per_split = [], [], []
 
     for method in methods:
         matrix_means += [result.iloc[:, [c.startswith(method+'_time') for c in result.columns]].mean(axis=1)]
         matrix_stds += [result.iloc[:, [c.startswith(method+'_time') for c in result.columns]].std(axis=1)]
+        matrix_per_split += [result.iloc[:, [c.startswith(method+'_time') for c in result.columns]]]
 
     matrix_means = pd.DataFrame(matrix_means, index=methods).T
     matrix_stds = pd.DataFrame(matrix_stds, index=methods).T
 
-    return matrix_means, matrix_stds
+    return matrix_means, matrix_stds, matrix_per_split
 
 
 def make_ranks_and_wins_table(matrix):
