@@ -56,7 +56,7 @@ Here, we list some tips and tricks that might help you understand how to use it 
 - TabPFN does not use any statistics from the test set. That means predicting each test example one-by-one will yield the same result as feeding the whole test set together.
 - TabPFN is differentiable in principle, only the pre-processing is not and relies on numpy.
 
-### Our Paper
+## Our Paper
 Read our [paper](https://arxiv.org/abs/2207.01848) for more information about the setup (or contact us ☺️).
 If you use our method, please cite us using
 ```
