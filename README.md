@@ -45,6 +45,17 @@ y_eval, p_eval = classifier.predict(X_test, return_winning_probability=True)
 print('Accuracy', accuracy_score(y_test, y_eval))
 ```
 
+### Tips and Tricks
+
+TabPFN is different from other methods you might know for tabular classification.
+Here, we list some tips and tricks that might help you understand how to use it best.
+
+- TabPFN expects scalar values only (you need to encode categoricals as integers or similar). It works best on data that does not contain any categorical or NaN data (see [Appendix B.1](https://arxiv.org/abs/2207.01848)).
+- TabPFN ensembles multiple input encodings per default. It feeds different index rotations of the features and labels to the model per ensemble member. You can control the ensembling with `TabPFNClassifier(...,N_ensemble_configurations=?)`
+- TabPFN pre-processes its inputs. It applies a z-score normalization (`x-train_x.mean()/train_x.std()`) per feature (fitted on the training set) and log-scales outliers [heuristically](https://github.com/automl/TabPFN/blob/f7402ec1916aa78d953574daf95508045af5953e/tabpfn/utils.py#L201). Finally, TabPFN  applies a PowerTransform to all features for every second ensemble member. Pre-processing is important for the TabPFN to make sure that the real-world dataset lies in the distribution of the synthetic datasets seen during training.
+- TabPFN does not use any statistics from the test set. That means predicting each test example one-by-one will yield the same result as feeding the whole test set together.
+- TabPFN is differentiable in principle, only the pre-processing is not and relies on numpy.
+
 ### Our Paper
 Read our [paper](https://arxiv.org/abs/2207.01848) for more information about the setup (or contact us ☺️).
 If you use our method, please cite us using
