@@ -125,7 +125,7 @@ def evaluate(datasets, bptt, eval_positions, metric_used, model, device='cpu'
                         ,**kwargs)
 
             if r is None:
-                print('Execution failed')
+                print('Execution failed', ds_name)
                 continue
 
             _, outputs, ys, best_configs, time_used = r
@@ -179,7 +179,7 @@ INTERNAL HELPER FUNCTIONS
 def check_file_exists(path):
     """Checks if a pickle file exists. Returns None if not, else returns the unpickled file."""
     if (os.path.isfile(path)):
-        print(f'loading results from {path}')
+        #print(f'loading results from {path}')
         with open(path, 'rb') as f:
             return np.load(f, allow_pickle=True).tolist()
     return None
@@ -261,7 +261,7 @@ def evaluate_position(X, y, categorical_feats, model, bptt
                 print(f'Loaded saved result for {path}')
             return result
         elif fetch_only:
-            print(f'Could not load saved result for {path}')
+            #print(f'Could not load saved result for {path}')
             return None
 
     ## Generate data splits
@@ -295,7 +295,7 @@ def evaluate_position(X, y, categorical_feats, model, bptt
                                                     , max_time=max_time, metric_used=metric_used, **kwargs)
     eval_ys = eval_ys[eval_position:]
     if outputs is None:
-        print('Execution failed')
+        print('Execution failed', ds_name)
         return None
 
     if torch.is_tensor(outputs): # Transfers data to cpu for saving
