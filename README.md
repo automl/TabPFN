@@ -15,9 +15,9 @@ Both demos are based on a scikit-learn interface that makes using the TabPFN as 
 pip install tabpfn
 ```
 
-If you want to evaluate our baselines, too, please install with
+If you want to train and evaluate our method like we did in the paper (including baselines) please install with
 ```bash
-pip install tabpfn[baselines]
+pip install tabpfn[full]
 ```
 To run the autogluon and autosklearn baseline please create a separate environment and install autosklearn / autogluon==0.4.0, installation in the same environment as our other baselines is not possible.
 

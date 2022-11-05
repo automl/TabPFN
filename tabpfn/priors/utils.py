@@ -1,14 +1,11 @@
 import random
 
 import torch
-import seaborn as sns
 
 from tabpfn.utils import set_locals_in_self
 from .prior import PriorDataLoader
 from torch import nn
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import scipy.stats as stats
 import math
 
@@ -50,6 +47,9 @@ def get_batch_to_dataloader(get_batch_method_):
     return DL
 
 def plot_features(data, targets, fig=None, categorical=True):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
     if torch.is_tensor(data):
         data = data.detach().cpu().numpy()
         targets = targets.detach().cpu().numpy()
@@ -94,6 +94,7 @@ def plot_features(data, targets, fig=None, categorical=True):
 
 
 def plot_prior(prior):
+    import matplotlib.pyplot as plt
     s = np.array([prior() for _ in range(0, 1000)])
     count, bins, ignored = plt.hist(s, 50, density=True)
     print(s.min())

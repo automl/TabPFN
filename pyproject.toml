@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tabpfn"
-version = "0.1.5"
+version = "0.1.7"
 authors = [
 {name="Noah Hollmann"},
-{name="Samuel Müller", email="muellesa@tf.uni-freiburg.de"},
+{name="Samuel Muller", email="muellesa@tf.uni-freiburg.de"},
 {name="Katharina Eggensperger"},
 {name="Frank Hutter"},
 ]
@@ -19,12 +19,8 @@ dependencies=[
         'torch>=1.9.0',
         'scikit-learn>=0.24.2',
         'pyyaml>=5.4.1',
-        'seaborn>=0.11.2',
-        'tqdm>=4.62.1',
         'numpy>=1.21.2',
-        'openml>=0.12.2',
-        'hyperopt>=0.2.5',
-        'configspace>=0.4.21',
+        'requests>=2.23.0',
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -35,13 +31,19 @@ classifiers = [
 [tool.hatch.build]
 exclude = [
   "*.cpkt",
+  "tabpfn/datasets/*.pickle",
 ]
 
 [project.optional-dependencies]
-baselines = [
-    'catboost>=0.26.1',
-    'auto-sklearn>=0.14.5',
-    'xgboost>=1.4.0',
+full = [
+    'catboost>=0.26.1', # baselines
+    'auto-sklearn>=0.14.5', # baselines
+    'xgboost>=1.4.0', # baselines
+    'hyperopt>=0.2.5', # baselines
+    'configspace>=0.4.21', # baselins + training + evaluation
+    'openml>=0.12.2', # evaluation + baselines
+    'seaborn>=0.11.2', # evaluation
+    'tqdm>=4.62.1', # training + evaluation
 ]
 
 [project.urls]
