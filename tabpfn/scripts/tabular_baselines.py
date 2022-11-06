@@ -938,7 +938,7 @@ def autosklearn2_metric(x, y, test_x, test_y, cat_features, metric_used, max_tim
         pred = clf.predict(test_x)
     metric = metric_used(test_y, pred)
 
-    return metric, pred, None
+    return metric, pred, clf.leaderboard()
 
 param_grid_hyperopt['ridge'] = {
     'max_iter': hp.randint('max_iter', 50, 500)
