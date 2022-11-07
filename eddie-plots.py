@@ -14,11 +14,20 @@ from tabpfn.datasets import load_openml_list, open_cc_dids, open_cc_valid_dids
 from tabpfn.scripts.tabular_baselines import clf_dict
 from tabpfn.scripts.tabular_evaluation import evaluate
 from tabpfn.scripts.tabular_metrics import (accuracy_metric, auc_metric,
-                                            calculate_score, cross_entropy)
+                                            brier_score_metric,
+                                            calculate_score, count_metric,
+                                            cross_entropy, ece_metric,
+                                            time_metric)
 
 HERE = Path(__file__).parent.resolve().absolute()
 
-METRICS = {"roc": auc_metric, "cross_entropy": cross_entropy, "acc": accuracy_metric}
+METRICS = {
+    "roc": auc_metric,
+    "cross_entropy": cross_entropy,
+    "acc": accuracy_metric,
+    "brier_score": brier_score_metric,
+    "ece": ece_metric,
+}
 
 PREDFINED_DATASET_PATHS = HERE / "tabpfn" / "datasets"
 PREDEFINED_DATASET_COLLECTIONS = {
@@ -114,6 +123,17 @@ class Dataset:
             for entry in datasets
         ]
 
+    def as_list(self) -> list:
+        """How the internals expect a dataset to look like"""
+        return [
+            self.name,
+            self.X,
+            self.y,
+            self.categorical_columns,
+            self.attribute_names,
+            self.info,
+        ]
+
 
 # Predefined methods with `no_tune={}` inidicating they are not tuned
 METHODS = {
@@ -198,16 +218,7 @@ def eval_method(
         device = "cpu"
 
     return evaluate(
-        datasets=[
-            [
-                dataset.name,
-                dataset.X,
-                dataset.y,
-                dataset.categorical_columns,
-                dataset.attribute_names,
-                dataset.info,
-            ]
-        ],  # Expects a list of datasets which are stored as a list of properties
+        datasets=[dataset.as_list()],
         model=classifier_evaluator,
         method=label,
         bptt=bptt,
@@ -278,7 +289,7 @@ if __name__ == "__main__":
         nargs="+",
         choices=METRICS,
         help="Metrics to calculate for results",
-        default=["roc", "cross_entropy", "acc"],
+        default=["roc", "cross_entropy", "acc", "brier_score", "ece"],
     )
 
     parser.add_argument(
@@ -339,7 +350,9 @@ if __name__ == "__main__":
     ):
         metric_f = METRICS[metric]
         metric_name = tb.get_scoring_string(metric_f, usage="")
-        r = eval_method(
+        key = f"{method}_time_{time}_{metric_name}_split_{split}"
+
+        results[key] = eval_method(
             dataset=dataset,
             label=method,
             result_path=args.result_path,
@@ -352,8 +365,8 @@ if __name__ == "__main__":
             split=split,
             overwrite=args.overwrite,
         )
-        results.update(r)
 
+    all_datasets_as_lists = [d.as_list() for d in all_datasets]
     # This will update the results in place
     for metric in args.result_metrics:
         metric_f = METRICS[metric]
@@ -361,8 +374,26 @@ if __name__ == "__main__":
             metric=metric_f,
             name=metric,
             global_results=results,
-            ds=all_datasets,
-            eval_positions=[1_000],
+            ds=all_datasets_as_lists,
+            eval_positions=[1_000] + [-1],
         )
 
     # We also do some other little bits
+    for agg in ["sum", "mean"]:
+        calculate_score(
+            metric=time_metric,
+            name="time",
+            global_results=results,
+            ds=all_datasets_as_lists,
+            eval_positions=[1_000] + [-1],
+            aggregator=agg,
+        )
+
+    calculate_score(
+        metric=count_metric,
+        name="count",
+        global_results=results,
+        ds=all_datasets_as_lists,
+        eval_positions=[1_000] + [-1],
+        aggregator="sum",
+    )
