@@ -187,13 +187,20 @@ def eval_complete_f(x, y, test_x, test_y, key, clf_, metric_used, max_time, no_t
     else:
       best=no_tune
 
+    start = time.time()
     clf = clf_(**best)
     clf.fit(x, y)
+    fit_time = time.time() - start
+    start = time.time()
     if is_classification(metric_used):
         pred = clf.predict_proba(test_x)
     else:
         pred = clf.predict(test_x)
+    inference_time = time.time() - start
     metric = metric_used(test_y, pred)
+    
+    best['fit_time'] = fit_time
+    best['inference_time'] = inference_time
 
     return metric, pred, best
 
