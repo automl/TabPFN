@@ -187,13 +187,20 @@ def eval_complete_f(x, y, test_x, test_y, key, clf_, metric_used, max_time, no_t
     else:
       best=no_tune
 
+    start = time.time()
     clf = clf_(**best)
     clf.fit(x, y)
+    fit_time = time.time() - start
+    start = time.time()
     if is_classification(metric_used):
         pred = clf.predict_proba(test_x)
     else:
         pred = clf.predict(test_x)
+    inference_time = time.time() - start
     metric = metric_used(test_y, pred)
+    
+    best['fit_time'] = fit_time
+    best['inference_time'] = inference_time
 
     return metric, pred, best
 
@@ -1234,11 +1241,15 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
                                              , one_hot=False
                                              , cat_features=cat_features
                                              , impute=False
-                                             , standardize=False)
+                                             , standardize=False
+                                            , gpu_id=None)
 
     # Nans in categorical features must be encoded as separate class
     x[:, cat_features], test_x[:, cat_features] = np.nan_to_num(x[:, cat_features], -1), np.nan_to_num(
         test_x[:, cat_features], -1)
+    
+    if gpu_id is not None:
+         gpu_params = {task_type="GPU", devices=gpu_id}
 
     def make_pd_from_np(x):
         data = pd.DataFrame(x)
@@ -1258,6 +1269,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
                 random_seed=int(y[:].sum()),
                                    logging_level='Silent',
                                     cat_features=cat_features,
+                **gpu_params,
                                       **params)
         else:
             return CatBoostRegressor(
@@ -1267,6 +1279,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
                 random_seed=int(y[:].sum()),
                 logging_level='Silent',
                 cat_features=cat_features,
+                **gpu_params,
                 **params)
 
     return eval_complete_f(x, y, test_x, test_y, 'xgb', clf_, metric_used, max_time, no_tune)
@@ -1287,11 +1300,14 @@ param_grid_hyperopt['xgb'] = {
     'n_estimators': hp.randint('n_estimators', 100, 4000), # This is smaller than in paper
 }
 
-def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None):
+def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None, gpu_id=None):
     import xgboost as xgb
     # XGB Documentation:
     # XGB handles categorical data appropriately without using One Hot Encoding, categorical features are experimetal
     # XGB handles missing values appropriately without imputation
+    
+    if gpu_id is not None:
+         gpu_params = {tree_method='gpu_hist', gpu_id=gpu_id}
 
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
@@ -1302,14 +1318,16 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no
     def clf_(**params):
         if is_classification(metric_used):
             return xgb.XGBClassifier(use_label_encoder=False
-                                     , nthread=1
+                                     , nthread=MULTITHREAD
                                      , **params
+                                     , **gpu_params
                                      , eval_metric=get_scoring_string(metric_used, usage='xgb') # AUC not implemented
             )
         else:
             return xgb.XGBRegressor(use_label_encoder=False
-                                     , nthread=1
+                                     , nthread=MULTITHREAD
                                      , **params
+                                    , **gpu_params
                                      , eval_metric=get_scoring_string(metric_used, usage='xgb')  # AUC not implemented
                                      )
 
