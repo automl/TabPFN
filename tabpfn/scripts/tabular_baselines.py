@@ -185,7 +185,7 @@ def eval_complete_f(x, y, test_x, test_y, key, clf_, metric_used, max_time, no_t
       else:
         best = {}
     else:
-      best=no_tune
+      best = no_tune.copy()
 
     start = time.time()
     clf = clf_(**best)
@@ -1249,7 +1249,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         test_x[:, cat_features], -1)
     
     if gpu_id is not None:
-         gpu_params = {task_type="GPU", devices=gpu_id}
+         gpu_params = {task_type:"GPU", devices:gpu_id}
 
     def make_pd_from_np(x):
         data = pd.DataFrame(x)
@@ -1307,7 +1307,7 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no
     # XGB handles missing values appropriately without imputation
     
     if gpu_id is not None:
-         gpu_params = {tree_method='gpu_hist', gpu_id=gpu_id}
+         gpu_params = {tree_method:'gpu_hist', gpu_id:gpu_id}
 
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
