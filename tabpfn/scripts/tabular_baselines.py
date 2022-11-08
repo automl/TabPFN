@@ -1250,6 +1250,8 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
     
     if gpu_id is not None:
          gpu_params = {task_type:"GPU", devices:gpu_id}
+    else:
+        gpu_params = {}
 
     def make_pd_from_np(x):
         data = pd.DataFrame(x)
@@ -1308,6 +1310,8 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no
     
     if gpu_id is not None:
          gpu_params = {tree_method:'gpu_hist', gpu_id:gpu_id}
+    else:
+        gpu_params = {}
 
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
