@@ -45,7 +45,7 @@ y_eval, p_eval = classifier.predict(X_test, return_winning_probability=True)
 print('Accuracy', accuracy_score(y_test, y_eval))
 ```
 
-### Tips and Tricks
+### TabPFN Usage
 
 TabPFN is different from other methods you might know for tabular classification.
 Here, we list some tips and tricks that might help you understand how to use it best.
