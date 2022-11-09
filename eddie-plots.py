@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import pickle
 import re
+from tqdm import tqdm
 from collections import Counter
 from dataclasses import dataclass
 from functools import partial
@@ -1000,12 +1001,31 @@ if __name__ == "__main__":
             "Mixed Test Datasets": [d.name for d in test_datasets if d.mixed],
         }
 
-        for name, datasets in list(collections.items())[:1]:
-            print(name, len(datasets))
+        for name, datasets in tqdm(collections.items(), "Dataset Collections"):
             do_plot(
                 result=result.at(dataset=datasets),
                 title_prefix=f"{name} ({len(datasets)})",
                 fig_name=name.replace(" ", "_").lower(),
+                path=args.plot_directory,
+                figsize=tuple(args.figsize),  # type: ignore
+                dpi=args.dpi,
+                extension=args.extension,
+            )
+
+        for dataset in tqdm(all_datasets, "Datasets"):
+            n_features = len(dataset.attribute_names)
+            n_categories = len(dataset.categorical_columns)
+            n_numerical = n_features - n_categories
+            feats = "Features: "
+            if n_categories > 0:
+                feats += f"C: {n_categories}"
+            if n_numerical > 0:
+                feats += f"N: {n_numerical}"
+
+            do_plot(
+                result=result.at(dataset=dataset.name),
+                title_prefix=f"{dataset.name} {feats}",
+                fig_name=dataset.name,
                 path=args.plot_directory,
                 figsize=tuple(args.figsize),  # type: ignore
                 dpi=args.dpi,
