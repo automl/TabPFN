@@ -1249,7 +1249,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
         test_x[:, cat_features], -1)
     
     if gpu_id is not None:
-         gpu_params = {task_type:"GPU", devices:gpu_id}
+         gpu_params = {'task_type':"GPU", 'devices':gpu_id}
     else:
         gpu_params = {}
 
@@ -1309,9 +1309,10 @@ def xgb_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no
     # XGB handles missing values appropriately without imputation
     
     if gpu_id is not None:
-         gpu_params = {tree_method:'gpu_hist', gpu_id:gpu_id}
+         gpu_params = {'tree_method':'gpu_hist', 'gpu_id':gpu_id}
     else:
         gpu_params = {}
+
 
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
