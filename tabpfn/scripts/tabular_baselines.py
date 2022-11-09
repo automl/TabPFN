@@ -199,10 +199,11 @@ def eval_complete_f(x, y, test_x, test_y, key, clf_, metric_used, max_time, no_t
     inference_time = time.time() - start
     metric = metric_used(test_y, pred)
     
+    best = {'best': best}
     best['fit_time'] = fit_time
     best['inference_time'] = inference_time
 
-    return metric, pred, best
+    return metric, pred, best#, times
 
 def preprocess_impute(x, y, test_x, test_y, impute, one_hot, standardize, cat_features=[]):
     import warnings
@@ -1236,7 +1237,7 @@ param_grid_hyperopt['catboost'] = {
     'iterations': hp.randint('iterations', 100, 4000), # This is smaller than in paper, 4000 leads to ram overusage
 }
 
-def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune={}, gpu_id=None):
+def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=300, no_tune=None, gpu_id=None):
     x, y, test_x, test_y = preprocess_impute(x, y, test_x, test_y
                                              , one_hot=False
                                              , cat_features=cat_features
