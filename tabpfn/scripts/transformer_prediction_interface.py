@@ -39,7 +39,7 @@ class CustomUnpickler(pickle.Unpickler):
 
 def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', onlyInference=False):
     """
-    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.s
+    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
 
     :param i:
     :param e:

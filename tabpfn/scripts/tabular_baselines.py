@@ -1284,7 +1284,7 @@ def catboost_metric(x, y, test_x, test_y, cat_features, metric_used, max_time=30
                 **gpu_params,
                 **params)
 
-    return eval_complete_f(x, y, test_x, test_y, 'xgb', clf_, metric_used, max_time, no_tune)
+    return eval_complete_f(x, y, test_x, test_y, 'catboost', clf_, metric_used, max_time, no_tune)
 
 
 # XGBoost
