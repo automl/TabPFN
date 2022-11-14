@@ -5,8 +5,7 @@ import pathlib
 from torch.utils.checkpoint import checkpoint
 
 from tabpfn.utils import normalize_data, to_ranking_low_mem, remove_outliers
-from tabpfn.priors.utils import normalize_by_used_features_f
-from tabpfn.utils import NOP
+from tabpfn.utils import NOP, normalize_by_used_features_f
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 
@@ -17,7 +16,7 @@ from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
 from pathlib import Path
-from tabpfn.scripts.model_builder import load_model
+from tabpfn.scripts.model_builder import load_model, load_model_only_inference
 import os
 import pickle
 import io
@@ -38,9 +37,9 @@ class CustomUnpickler(pickle.Unpickler):
         else:
             return super().find_class(module, name)
 
-def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition=''):
+def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', onlyInference=False):
     """
-    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
+    Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.s
 
     :param i:
     :param e:
@@ -52,6 +51,9 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
     :return:
     """
     def get_file(e):
+        """
+        Returns the different paths of model_file, model_path and results_file
+        """
         model_file = f'models_diff/prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{e}.cpkt'
         model_path = os.path.join(base_path, model_file)
         # print('Evaluate ', model_path)
@@ -88,8 +90,13 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
 
     #print(f'Loading {model_file}')
-
-    model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
+    if onlyInference:
+        print("Loading model that can be used for inference only")
+        model, c = load_model_only_inference(base_path, model_file, device, eval_positions=[], verbose=False)
+    else:
+        #until now also only capable of inference
+        model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
+    #model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
 
     return model, c, results_file
 
@@ -97,13 +104,13 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=3
-                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True):
+                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True, onlyInference=False):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
 
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
-                                                     eval_addition='')
+                                                     eval_addition='', onlyInference=onlyInference)
         #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device

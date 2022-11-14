@@ -39,3 +39,11 @@ class ScaledSoftmaxCE(nn.Module):
         temp_scales = x[..., -10:]
 
         logprobs = logits.softmax(-1)
+
+class Losses():
+    gaussian = nn.GaussianNLLLoss(full=True, reduction='none')
+    mse = nn.MSELoss(reduction='none')
+    def ce(num_classes):
+        num_classes = num_classes.shape[0] if torch.is_tensor(num_classes) else num_classes
+        return nn.CrossEntropyLoss(reduction='none', weight=torch.ones(num_classes))
+    bce = nn.BCEWithLogitsLoss(reduction='none')

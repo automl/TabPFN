@@ -1,10 +1,9 @@
 from functools import partial
-from tabpfn.train import train, Losses
-import tabpfn.priors as priors
 import tabpfn.encoders as encoders
 
-from tabpfn.priors.utils import trunc_norm_sampler_f, gamma_sampler_f
+from tabpfn.transformer import TransformerModel
 from tabpfn.utils import get_uniform_single_eval_pos_sampler
+from tabpfn.losses import Losses
 import torch
 import math
 
@@ -39,6 +38,47 @@ def get_gpu_memory():
     memory_free_info = sp.check_output(command.split()).decode('ascii')
     return memory_free_info
 
+def load_model_only_inference(path, filename, device, eval_positions, verbose):
+    """
+    only restores inference capability
+    """
+    model_state, optimizer_state, config_sample = torch.load(os.path.join(path, filename), map_location='cpu')
+    config_sample['num_classes'] = 2
+
+    if (('nan_prob_no_reason' in config_sample and config_sample['nan_prob_no_reason'] > 0.0) or
+        ('nan_prob_a_reason' in config_sample and config_sample['nan_prob_a_reason'] > 0.0) or
+        ('nan_prob_unknown_reason' in config_sample and config_sample['nan_prob_unknown_reason'] > 0.0)):
+        encoder = encoders.NanHandlingEncoder
+    else:
+        encoder = partial(encoders.Linear, replace_nan_by_zero=True)
+
+    n_out = config_sample['max_num_classes']
+
+    device = device if torch.cuda.is_available() else 'cpu:0'
+    encoder = encoder(config_sample['num_features'], config_sample['emsize'])
+
+    nhid = config_sample['emsize'] * config_sample['nhid_factor']
+    y_encoder_generator = encoders.get_Canonical(config_sample['max_num_classes']) if config_sample.get('canonical_y_encoder', False) else encoders.Linear
+    #print(model_state)
+    if config_sample['max_num_classes'] == 2:
+        loss = Losses.bce
+    elif config_sample['max_num_classes'] > 2:
+        loss = Losses.ce(config_sample['max_num_classes'])
+
+    model = TransformerModel(encoder, n_out, config_sample['emsize'], config_sample['nhead'], nhid, config_sample['nlayers'],
+                             y_encoder=y_encoder_generator(1, config_sample['emsize']), dropout=config_sample['dropout']
+                             , efficient_eval_masking=config_sample['efficient_eval_masking'])
+
+    print(f"Using a Transformer with {sum(p.numel() for p in model.parameters()) / 1000 / 1000:.{2}f} M parameters")
+
+    model.criterion = loss
+    module_prefix = 'module.'
+    model_state = {k.replace(module_prefix, ''): v for k, v in model_state.items()}
+    model.load_state_dict(model_state)
+    model.to(device)
+    model.eval()
+
+    return (float('inf'), float('inf'), model), config_sample #no loss measured
 
 def load_model(path, filename, device, eval_positions, verbose):
     # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
@@ -102,6 +142,7 @@ def get_default_spec(test_datasets, valid_datasets):
     return bptt, eval_positions, max_features, max_splits
 
 def get_mlp_prior_hyperparameters(config):
+    from tabpfn.priors.utils import gamma_sampler_f
     config = {hp: (list(config[hp].values())[0]) if type(config[hp]) is dict else config[hp] for hp in config}
 
     if 'random_feature_rotation' not in config:
@@ -131,6 +172,7 @@ def get_gp_prior_hyperparameters(config):
 
 
 def get_meta_gp_prior_hyperparameters(config):
+    from tabpfn.priors.utils import trunc_norm_sampler_f
     config = {hp: (list(config[hp].values())[0]) if type(config[hp]) is dict else config[hp] for hp in config}
 
     if "outputscale_mean" in config:
@@ -146,6 +188,8 @@ def get_meta_gp_prior_hyperparameters(config):
 
 
 def get_model(config, device, should_train=True, verbose=False, state_dict=None, epoch_callback=None):
+    import tabpfn.priors as priors
+    from tabpfn.train import train
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
     config['verbose'] = verbose_prior
