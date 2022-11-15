@@ -38,7 +38,7 @@ def get_gpu_memory():
     memory_free_info = sp.check_output(command.split()).decode('ascii')
     return memory_free_info
 
-def load_model_only_inference(path, filename, device, eval_positions, verbose):
+def load_model_only_inference(path, filename, device):
     """
     only restores inference capability
     """
