@@ -40,10 +40,13 @@ def get_gpu_memory():
 
 def load_model_only_inference(path, filename, device):
     """
-    only restores inference capability
+    Loads a saved model from the specified position. This function only restores inference capabilities and
+    cannot be used for further training.
     """
+
     model_state, optimizer_state, config_sample = torch.load(os.path.join(path, filename), map_location='cpu')
-    config_sample['num_classes'] = 2
+
+    #config_sample['num_classes'] = 2 TODO:David test if can be removed
 
     if (('nan_prob_no_reason' in config_sample and config_sample['nan_prob_no_reason'] > 0.0) or
         ('nan_prob_a_reason' in config_sample and config_sample['nan_prob_a_reason'] > 0.0) or
@@ -59,11 +62,9 @@ def load_model_only_inference(path, filename, device):
 
     nhid = config_sample['emsize'] * config_sample['nhid_factor']
     y_encoder_generator = encoders.get_Canonical(config_sample['max_num_classes']) if config_sample.get('canonical_y_encoder', False) else encoders.Linear
-    #print(model_state)
-    if config_sample['max_num_classes'] == 2:
-        loss = Losses.bce
-    elif config_sample['max_num_classes'] > 2:
-        loss = Losses.ce(config_sample['max_num_classes'])
+
+    assert config_sample['max_num_classes'] > 2
+    loss = torch.nn.CrossEntropyLoss(reduction='none', weight=torch.ones(int(config_sample['max_num_classes'])))
 
     model = TransformerModel(encoder, n_out, config_sample['emsize'], config_sample['nhead'], nhid, config_sample['nlayers'],
                              y_encoder=y_encoder_generator(1, config_sample['emsize']), dropout=config_sample['dropout']
@@ -78,11 +79,12 @@ def load_model_only_inference(path, filename, device):
     model.to(device)
     model.eval()
 
-    return (float('inf'), float('inf'), model), config_sample #no loss measured
+    return (float('inf'), float('inf'), model), config_sample # no loss measured
 
 def load_model(path, filename, device, eval_positions, verbose):
     # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
     # print('Loading....')
+    print('!! Warning: GPyTorch must be installed !!')
     model_state, optimizer_state, config_sample = torch.load(
         os.path.join(path, filename), map_location='cpu')
     if ('differentiable_hyperparameters' in config_sample

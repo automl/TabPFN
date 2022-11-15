@@ -37,7 +37,7 @@ class CustomUnpickler(pickle.Unpickler):
         else:
             return super().find_class(module, name)
 
-def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', onlyInference=False):
+def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', only_inference=True):
     """
     Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
 
@@ -90,8 +90,8 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
 
     #print(f'Loading {model_file}')
-    if onlyInference:
-        print("Loading model that can be used for inference only")
+    if only_inference:
+        print('Loading model that can be used for inference only')
         model, c = load_model_only_inference(base_path, model_file, device)
     else:
         #until now also only capable of inference
@@ -104,13 +104,13 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=3
-                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True, onlyInference=False):
+                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True, onlyInference=True):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
 
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
-                                                     eval_addition='', onlyInference=onlyInference)
+                                                     eval_addition='', only_inference=onlyInference)
         #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device
