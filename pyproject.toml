@@ -15,7 +15,6 @@ description = "Interface for using TabPFN and library to train TabPFN'"
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies=[
-        'gpytorch>=1.5.0',
         'torch>=1.9.0',
         'scikit-learn>=0.24.2',
         'pyyaml>=5.4.1',
@@ -36,6 +35,7 @@ exclude = [
 
 [project.optional-dependencies]
 full = [
+    'gpytorch>=1.5.0', # training
     'catboost>=0.26.1', # baselines
     'auto-sklearn>=0.14.5', # baselines
     'xgboost>=1.4.0', # baselines
