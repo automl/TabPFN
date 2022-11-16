@@ -60,7 +60,7 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
         print("overall_difference_in_cross_entropy_mean_over_all_datasets :", overall_difference_in_cross_entropy_mean)
 
         allowed_average_auc_difference_over_all_datasets = 0.001
-        allowed_average_cross_entropy_difference_over_all_datasets = 0.002
+        allowed_average_cross_entropy_difference_over_all_datasets = 0.003
 
         self.assertTrue(len(test_datasets) >= 1)
         overall_difference_in_auc_mean /= len(test_datasets)
