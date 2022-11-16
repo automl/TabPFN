@@ -5,8 +5,7 @@ import pathlib
 from torch.utils.checkpoint import checkpoint
 
 from tabpfn.utils import normalize_data, to_ranking_low_mem, remove_outliers
-from tabpfn.priors.utils import normalize_by_used_features_f
-from tabpfn.utils import NOP
+from tabpfn.utils import NOP, normalize_by_used_features_f
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 
@@ -17,7 +16,7 @@ from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
 from pathlib import Path
-from tabpfn.scripts.model_builder import load_model
+from tabpfn.scripts.model_builder import load_model, load_model_only_inference
 import os
 import pickle
 import io
@@ -38,7 +37,7 @@ class CustomUnpickler(pickle.Unpickler):
         else:
             return super().find_class(module, name)
 
-def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition=''):
+def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='', only_inference=True):
     """
     Workflow for loading a model and setting appropriate parameters for diffable hparam tuning.
 
@@ -52,6 +51,9 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
     :return:
     """
     def get_file(e):
+        """
+        Returns the different paths of model_file, model_path and results_file
+        """
         model_file = f'models_diff/prior_diff_real_checkpoint{add_name}_n_{i}_epoch_{e}.cpkt'
         model_path = os.path.join(base_path, model_file)
         # print('Evaluate ', model_path)
@@ -88,22 +90,28 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
 
     #print(f'Loading {model_file}')
-
-    model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
+    if only_inference:
+        print('Loading model that can be used for inference only')
+        model, c = load_model_only_inference(base_path, model_file, device)
+    else:
+        #until now also only capable of inference
+        model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
+    #model, c = load_model(base_path, model_file, device, eval_positions=[], verbose=False)
 
     return model, c, results_file
 
 
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=3
-                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True):
+    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0,
+                 N_ensemble_configurations=3, combine_preprocessing=False, no_preprocess_mode=False,
+                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
 
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
-                                                     eval_addition='')
+                                                     eval_addition='', only_inference=only_inference)
         #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device
@@ -125,6 +133,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.combine_preprocessing = combine_preprocessing
         self.feature_shift_decoder = feature_shift_decoder
         self.multiclass_decoder = multiclass_decoder
+        self.seed = seed
 
     def __getstate__(self):
         print('Pickle')
@@ -201,8 +210,9 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          combine_preprocessing=self.combine_preprocessing,
                                          multiclass_decoder=self.multiclass_decoder,
                                          feature_shift_decoder=self.feature_shift_decoder,
-                                         differentiable_hps_as_style=self.differentiable_hps_as_style
-                                         , **get_params_from_config(self.c))
+                                         differentiable_hps_as_style=self.differentiable_hps_as_style,
+                                         seed=self.seed,
+                                         **get_params_from_config(self.c))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
         return prediction_.detach().cpu().numpy()
@@ -236,7 +246,9 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         differentiable_hps_as_style=False,
                         average_logits=True,
                         fp16_inference=False,
-                        normalize_with_sqrt=False, **kwargs):
+                        normalize_with_sqrt=False,
+                        seed=0,
+                        **kwargs):
     """
 
     :param model:
@@ -368,13 +380,16 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
     preprocess_transform_configurations = ['none', 'power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
 
+    if seed is not None:
+        torch.manual_seed(seed)
+
     feature_shift_configurations = torch.randperm(eval_xs.shape[2]) if feature_shift_decoder else [0]
     class_shift_configurations = torch.randperm(len(torch.unique(eval_ys))) if multiclass_decoder == 'permutation' else [0]
 
     ensemble_configurations = list(itertools.product(class_shift_configurations, feature_shift_configurations))
     #default_ensemble_config = ensemble_configurations[0]
 
-    rng = random.Random(0)
+    rng = random.Random(seed)
     rng.shuffle(ensemble_configurations)
     ensemble_configurations = list(itertools.product(ensemble_configurations, preprocess_transform_configurations, styles_configurations))
     ensemble_configurations = ensemble_configurations[0:N_ensemble_configurations]

@@ -66,8 +66,10 @@ def eval_model(i, e, valid_datasets, test_datasets, train_datasets, add_name, ba
     print(results_file)
     r = [c.copy(), metrics, metrics_valid, style.to('cpu') if style else style, temperature.to('cpu') if temperature else temperature, optimization_route]
     with open(results_file, 'wb') as output:
-        del r[0]['num_features_used']
-        del r[0]['categorical_features_sampler']
+        if 'num_features_used' in r[0]:
+            del r[0]['num_features_used']
+        if 'categorical_features_sampler' in r[0]:
+            del r[0]['categorical_features_sampler']
         pickle.dump(r, output)
 
     _, _, _, style, temperature, _ = r

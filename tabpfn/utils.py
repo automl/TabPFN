@@ -291,3 +291,8 @@ def product_dict(dic):
     vals = dic.values()
     for instance in itertools.product(*vals):
         yield dict(zip(keys, instance))
+
+def normalize_by_used_features_f(x, num_features_used, num_features, normalize_with_sqrt=False):
+    if normalize_with_sqrt:
+        return x / (num_features_used / num_features)**(1 / 2)
+    return x / (num_features_used / num_features)
