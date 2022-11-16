@@ -104,13 +104,13 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0, N_ensemble_configurations=3
-                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True, onlyInference=True):
+                 , combine_preprocessing=False, no_preprocess_mode=False, multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True):
         # Model file specification (Model name, Epoch)
         i, e = i, -1
 
 
         model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
-                                                     eval_addition='', only_inference=onlyInference)
+                                                     eval_addition='', only_inference=only_inference)
         #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device
