@@ -3,7 +3,6 @@ import tabpfn.encoders as encoders
 
 from tabpfn.transformer import TransformerModel
 from tabpfn.utils import get_uniform_single_eval_pos_sampler
-from tabpfn.losses import Losses
 import torch
 import math
 
@@ -191,7 +190,7 @@ def get_meta_gp_prior_hyperparameters(config):
 
 def get_model(config, device, should_train=True, verbose=False, state_dict=None, epoch_callback=None):
     import tabpfn.priors as priors
-    from tabpfn.train import train
+    from tabpfn.train import train, Losses
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
     config['verbose'] = verbose_prior

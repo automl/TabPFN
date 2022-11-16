@@ -44,7 +44,7 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
                                         - prediction_normal[number][class_nr])
                                     < allowed_difference_of_probabilities)
 
-            allowed_difference_in_auc_score = 0.02
+            allowed_difference_in_auc_score = 0.03
             difference_in_auc_score = (tabular_metrics.auc_metric(test_ys, prediction_with_only_inference)
                                        - tabular_metrics.auc_metric(test_ys, prediction_normal))
             overall_difference_in_auc_mean += difference_in_auc_score
@@ -59,8 +59,8 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
         print("overall_difference_in_auc_mean_over_all_datasets:", overall_difference_in_auc_mean)
         print("overall_difference_in_cross_entropy_mean_over_all_datasets :", overall_difference_in_cross_entropy_mean)
 
-        allowed_average_auc_difference_over_all_datasets = 0.001
-        allowed_average_cross_entropy_difference_over_all_datasets = 0.003
+        allowed_average_auc_difference_over_all_datasets = 0.002
+        allowed_average_cross_entropy_difference_over_all_datasets = 0.005
 
         self.assertTrue(len(test_datasets) >= 1)
         overall_difference_in_auc_mean /= len(test_datasets)
