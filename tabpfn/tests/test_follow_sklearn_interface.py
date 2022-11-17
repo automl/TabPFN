@@ -1,6 +1,8 @@
 import unittest
 
 import numpy as np
+import pickle
+
 from tabpfn import TabPFNClassifier
 
 
@@ -19,5 +21,11 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
         classifier.fit(train_xs, train_ys)
         print(classifier) # this might fail in some scenarios
         pred1 = classifier.predict_proba(test_xs)
+        pickle_dump = pickle.dumps(classifier)
+        classifier = pickle.loads(pickle_dump)
+        pred2 = classifier.predict_proba(test_xs)
+        self.assertTrue((pred1 == pred2).all())
+
+
 
 

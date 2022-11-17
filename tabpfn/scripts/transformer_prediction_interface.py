@@ -110,12 +110,13 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                  multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0):
         # Model file specification (Model name, Epoch)
         i = 0
+        model_key = model_string+'|'+str(device)
         if model_string in self.models_in_memory:
-            model, c, results_file = self.models_in_memory[model_string]
+            model, c, results_file = self.models_in_memory[model_key]
         else:
             model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
                                                          eval_addition='', only_inference=only_inference)
-            self.models_in_memory[model_string] = (model, c, results_file)
+            self.models_in_memory[model_key] = (model, c, results_file)
             if len(self.models_in_memory) == 2:
                 print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
         #style, temperature = self.load_result_minimal(style_file, i, e)
@@ -144,17 +145,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def remove_models_from_memory(self):
         self.models_in_memory = {}
-
-    def __getstate__(self):
-        print('Pickle')
-        d = self.__dict__
-        d['model'] = list(d['model'])
-        d['model'][3] = None
-        return self.__dict__
-
-    def __setstate__(self, d):
-        print("I'm being unpickled with these values: ")
-        self.__dict__ = d
 
     def load_result_minimal(self, path, i, e):
         with open(path, 'rb') as output:
