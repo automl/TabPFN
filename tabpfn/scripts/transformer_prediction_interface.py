@@ -103,15 +103,21 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
-    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='', i=0,
+    models_in_memory = {}
+
+    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, combine_preprocessing=False, no_preprocess_mode=False,
                  multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0):
         # Model file specification (Model name, Epoch)
-        i, e = i, -1
-
-
-        model, c, results_file = load_model_workflow(i, e, add_name=model_string, base_path=base_path, device=device,
-                                                     eval_addition='', only_inference=only_inference)
+        i = 0
+        if model_string in self.models_in_memory:
+            model, c, results_file = self.models_in_memory[model_string]
+        else:
+            model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
+                                                         eval_addition='', only_inference=only_inference)
+            self.models_in_memory[model_string] = (model, c, results_file)
+            if len(self.models_in_memory) == 2:
+                print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
         #style, temperature = self.load_result_minimal(style_file, i, e)
 
         self.device = device
@@ -133,7 +139,11 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.combine_preprocessing = combine_preprocessing
         self.feature_shift_decoder = feature_shift_decoder
         self.multiclass_decoder = multiclass_decoder
+        self.only_inference = only_inference
         self.seed = seed
+
+    def remove_models_from_memory(self):
+        self.models_in_memory = {}
 
     def __getstate__(self):
         print('Pickle')
