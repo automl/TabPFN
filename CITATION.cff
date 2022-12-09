@@ -9,7 +9,7 @@ authors:
 given-names: "Katharina"
 - family-names: "Hutter"
 given-names: "Frank"
-title: "My Research Software"
+title: "TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second"
 version: 2.0.4
 url: "https://github.com/automl/TabPFN"
 preferred-citation:
@@ -19,11 +19,11 @@ preferred-citation:
     given-names: "Noah"
   - family-names: "Müller"
     given-names: "Samuel"
-    - family-names: "Eggensperger"
-    given-names: "Katharina"
-    - family-names: "Hutter"
-    given-names: "Frank"
+  - family-names: "Eggensperger"
+  given-names: "Katharina"
+  - family-names: "Hutter"
+  given-names: "Frank"
   url: "https://arxiv.org/abs/2207.01848"
   journal: "Arxiv Preprint"
-  title: "My awesome research software"
+  title: "TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second"
   year: 2022
