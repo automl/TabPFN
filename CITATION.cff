@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Hollmann"
+  given-names: "Noah"
+- family-names: "Müller"
+  given-names: "Samuel"
+- family-names: "Eggensperger"
+given-names: "Katharina"
+- family-names: "Hutter"
+given-names: "Frank"
+title: "My Research Software"
+version: 2.0.4
+url: "https://github.com/automl/TabPFN"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Hollmann"
+    given-names: "Noah"
+  - family-names: "Müller"
+    given-names: "Samuel"
+    - family-names: "Eggensperger"
+    given-names: "Katharina"
+    - family-names: "Hutter"
+    given-names: "Frank"
+  url: "https://arxiv.org/abs/2207.01848"
+  journal: "Arxiv Preprint"
+  title: "My awesome research software"
+  year: 2022
