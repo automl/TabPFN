@@ -107,7 +107,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, combine_preprocessing=False, no_preprocess_mode=False,
-                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0):
+                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0,
+                 no_grad=True):
         # Model file specification (Model name, Epoch)
         i = 0
         model_key = model_string+'|'+str(device)
@@ -142,6 +143,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.multiclass_decoder = multiclass_decoder
         self.only_inference = only_inference
         self.seed = seed
+        self.no_grad = no_grad
 
     def remove_models_from_memory(self):
         self.models_in_memory = {}
@@ -167,10 +169,15 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         return np.asarray(y, dtype=np.float64, order="C")
 
     def fit(self, X, y, overwrite_warning=False):
-        # Check that X and y have correct shape
-        X, y = check_X_y(X, y, force_all_finite=False)
-        # Store the classes seen during fit
-        y = self._validate_targets(y)
+        """
+        If no_grad is set to False the function takes X and y as tensors and doesn't fully check the compatibility.
+        Normally this function takes X and y as numpy.ndarrays
+        """
+        if self.no_grad:
+            # Check that X and y have correct shape
+            X, y = check_X_y(X, y, force_all_finite=False)
+            # Store the classes seen during fit
+            y = self._validate_targets(y)
 
         self.X_ = X
         self.y_ = y
@@ -181,21 +188,29 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             raise ValueError("The number of classes for this classifier is restricted to ", self.max_num_classes)
         if X.shape[0] > 1024 and not overwrite_warning:
             raise ValueError("⚠️ WARNING: TabPFN is not made for datasets with a trainingsize > 1024. Prediction might take a while, be less reliable. We advise not to run datasets > 10k samples, which might lead to your machine crashing (due to quadratic memory scaling of TabPFN). Please confirm you want to run by passing overwrite_warning=True to the fit function.")
-            
+
 
         # Return the classifier
         return self
 
-    def predict_proba(self, X, normalize_with_test=False):
+    def predict_proba(self, X, normalize_with_test=False, return_logits=False):
+        """
+        If no_grad is true the function takes X as a numpy.ndarray. If no_grad is false X must be a torch tensor and
+        is not fully checked.
+        """
         # Check is fit had been called
         check_is_fitted(self)
 
         # Input validation
-        X = check_array(X, force_all_finite=False)
-        X_full = np.concatenate([self.X_, X], axis=0)
-        X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
-        y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
-        y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
+        if self.no_grad:
+            X = check_array(X, force_all_finite=False)
+            X_full = np.concatenate([self.X_, X], axis=0)
+            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1) #TODO David : remove requires_grad
+            y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
+            y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
+        else:
+            X_full = torch.cat((self.X_, X), dim=0).float().unsqueeze(1).to(self.device)
+            y_full = torch.cat((self.y_, torch.zeros(X[:, 0].shape)), dim=0).float().unsqueeze(1).to(self.device)
 
         eval_pos = self.X_.shape[0]
 
@@ -212,10 +227,12 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          feature_shift_decoder=self.feature_shift_decoder,
                                          differentiable_hps_as_style=self.differentiable_hps_as_style,
                                          seed=self.seed,
+                                         return_logits=return_logits,
+                                         no_grad=self.no_grad,
                                          **get_params_from_config(self.c))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
-        return prediction_.detach().cpu().numpy()
+        return prediction_.detach().cpu().numpy() if self.no_grad else prediction_
 
     def predict(self, X, return_winning_probability=False, normalize_with_test=False):
         p = self.predict_proba(X, normalize_with_test=normalize_with_test)
@@ -248,6 +265,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         fp16_inference=False,
                         normalize_with_sqrt=False,
                         seed=0,
+                        no_grad=True,
+                        return_logits=False,
                         **kwargs):
     """
 
@@ -279,7 +298,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
     def predict(eval_xs, eval_ys, used_style, softmax_temperature, return_logits):
         # Initialize results array size S, B, Classes
 
-        inference_mode_call = torch.inference_mode() if inference_mode else NOP()
+        # no_grad disables inference_mode, because otherwise the gradients are lost
+        inference_mode_call = torch.inference_mode() if inference_mode and no_grad else NOP()
         with inference_mode_call:
             start = time.time()
             output = model(
@@ -300,7 +320,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
         return output
 
-    def preprocess_input(eval_xs, preprocess_transform):
+    def preprocess_input(eval_xs, preprocess_transform, no_grad=True):
         import warnings
 
         if eval_xs.shape[1] > 1:
@@ -339,20 +359,27 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
         eval_xs = eval_xs.unsqueeze(1)
 
-        # TODO: Cautian there is information leakage when to_ranking is used, we should not use it
-        eval_xs = remove_outliers(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position) if not normalize_to_ranking else normalize_data(to_ranking_low_mem(eval_xs))
+        # TODO: Caution there is information leakage when to_ranking is used, we should not use it
+        # TODO: David check if works with remove_outliers
+
+        #can't calculate a gradient over values that were set to nan
+        eval_xs = remove_outliers(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position,
+                                  no_grad=no_grad) \
+                if not normalize_to_ranking else normalize_data(to_ranking_low_mem(eval_xs))
+
         # Rescale X
         eval_xs = normalize_by_used_features_f(eval_xs, eval_xs.shape[-1], max_features,
                                                normalize_with_sqrt=normalize_with_sqrt)
 
-        return eval_xs.detach().to(device)
+        #return eval_xs.detach().to(device) #TODO David add .detach() again
+        return eval_xs.to(device)
 
     eval_xs, eval_ys = eval_xs.to(device), eval_ys.to(device)
     eval_ys = eval_ys[:eval_position]
 
     model.to(device)
 
-    model.eval()
+    model.eval() #TODO David check if gradients are influenced
 
     import itertools
     if not differentiable_hps_as_style:
@@ -421,12 +448,14 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 #                        preprocess_input(eval_xs_, preprocess_transform='none')], -1)
                 #eval_xs_ = torch.flatten(torch.swapaxes(eval_xs_, -2, -1), -2)
             else:
-                eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration)
+                eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration,
+                                            no_grad=no_grad)
+                #eval_xs_.to(device) TODO: David
             eval_xs_transformed[preprocess_transform_configuration] = eval_xs_
 
         eval_ys_ = ((eval_ys_ + class_shift_configuration) % num_classes).float()
 
-        eval_xs_ = torch.cat([eval_xs_[..., feature_shift_configuration:],eval_xs_[..., :feature_shift_configuration]],dim=-1)
+        eval_xs_ = torch.cat([eval_xs_[..., feature_shift_configuration:], eval_xs_[..., :feature_shift_configuration]], dim=-1)
 
         # Extend X
         if extend_features:
@@ -447,7 +476,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         #preprocess_transform_ = preprocess_transform if styles_configuration % 2 == 0 else 'none'
         import warnings
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",
+            if no_grad:
+                warnings.filterwarnings("ignore",
                                     message="None of the inputs have requires_grad=True. Gradients will be None")
             warnings.filterwarnings("ignore",
                                     message="torch.cuda.amp.autocast only affects CUDA ops, but CUDA is not available.  Disabling.")
@@ -467,12 +497,15 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
         #output_ = predict(eval_xs, eval_ys, style_, preprocess_transform_)
         if not average_logits:
-            output_ = torch.nn.functional.softmax(output_, dim=-1)
+            # transforms every ensemble_configuration into a probability -> equal contribution of every configuration
+            output_ = torch.nn.functional.softmax(output_, dim=-1) if not return_logits \
+                else torch.nn.functional.log_softmax(output_, dim=-1)
         output = output_ if output is None else output + output_
 
-    output = output / len(ensemble_configurations)
-    if average_logits:
-        output = torch.nn.functional.softmax(output, dim=-1)
+    output /= len(ensemble_configurations)
+    if average_logits and not return_logits:
+        output = torch.nn.functional.softmax(output, dim=-1) if not return_logits \
+                else torch.nn.functional.log_softmax(output, dim=-1)
 
     output = torch.transpose(output, 0, 1)
 

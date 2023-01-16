@@ -4,6 +4,7 @@ import argparse
 import random
 import datetime
 import itertools
+import time
 
 import torch
 from torch import nn
@@ -198,19 +199,27 @@ def normalize_data(data, normalize_positions=-1):
 
     return data
 
-def remove_outliers(X, n_sigma=4, normalize_positions=-1):
+def remove_outliers(X, n_sigma=4, normalize_positions=-1, no_grad=True):
     # Expects T, B, H
     assert len(X.shape) == 3, "X must be T,B,H"
     #for b in range(X.shape[1]):
         #for col in range(X.shape[2]):
     data = X if normalize_positions == -1 else X[:normalize_positions]
-    data_clean = data[:].clone()
+
     data_mean, data_std = torch_nanmean(data, axis=0), torch_nanstd(data, axis=0)
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
-    data_clean[torch.logical_or(data_clean > upper, data_clean < lower)] = np.nan
-    data_mean, data_std = torch_nanmean(data_clean, axis=0), torch_nanstd(data_clean, axis=0)
+    if no_grad:
+        data_clean = data[:].clone()
+        data_clean[torch.logical_or(data_clean > upper, data_clean < lower)] = float('nan')
+        data_mean, data_std = torch_nanmean(data_clean, axis=0), torch_nanstd(data_clean, axis=0)
+
+    else: #TODO:David check if it does the same
+        mask = (data < upper) & (data > lower)
+        data_mean = (data * mask).sum(dim=0) / mask.sum(dim=0)
+        data_std = torch.sqrt(torch.square((data - data_mean) * mask).sum(dim=0) / (mask.sum(dim=0) - 1))
+
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
