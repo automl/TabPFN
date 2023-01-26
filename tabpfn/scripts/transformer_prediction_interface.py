@@ -195,8 +195,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X, normalize_with_test=False, return_logits=False):
         """
-        If no_grad is true the function takes X as a numpy.ndarray. If no_grad is false X must be a torch tensor and
-        is not fully checked.
+        If no_grad is true in the classifier the function takes X as a numpy.ndarray. If no_grad is false X must be a
+        torch tensor and is not fully checked.
         """
         # Check is fit had been called
         check_is_fitted(self)
@@ -360,11 +360,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         eval_xs = eval_xs.unsqueeze(1)
 
         # TODO: Caution there is information leakage when to_ranking is used, we should not use it
-        # TODO: David check if works with remove_outliers
 
-        #can't calculate a gradient over values that were set to nan
-        eval_xs = remove_outliers(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position,
-                                  no_grad=no_grad) \
+        eval_xs = remove_outliers(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position) \
                 if not normalize_to_ranking else normalize_data(to_ranking_low_mem(eval_xs))
 
         # Rescale X

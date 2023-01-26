@@ -173,6 +173,18 @@ def nan_handling_missing_for_no_reason_value(set_value_to_nan=0.0):
 def nan_handling_missing_for_a_reason_value(set_value_to_nan=0.0):
     return get_nan_value(float('inf'), set_value_to_nan)
 
+def torch_masked_mean_and_std(x, mask, axis=0):
+    """
+    Returns the mean and std of a torch tensor and only considers the elements, where the mask is true
+    """
+    num = torch.where(~mask, torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
+    value = torch.where(~mask, torch.full_like(x, 0), x).sum(axis=axis)
+    mean = value / num
+    mean_broadcast = torch.repeat_interleave(mean.unsqueeze(axis), x.shape[axis], dim=axis)
+    quadratic_difference_from_mean = torch.square(mean_broadcast - x)
+    return mean, torch.sqrt(torch.sum(torch.where(~mask, torch.full_like(quadratic_difference_from_mean, 0),
+                                        quadratic_difference_from_mean), axis=axis) / (num - 1))
+
 def torch_nanmean(x, axis=0, return_nanshare=False):
     num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
     value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(axis=axis)
@@ -199,7 +211,7 @@ def normalize_data(data, normalize_positions=-1):
 
     return data
 
-def remove_outliers(X, n_sigma=4, normalize_positions=-1, no_grad=True):
+def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     # Expects T, B, H
     assert len(X.shape) == 3, "X must be T,B,H"
     #for b in range(X.shape[1]):
@@ -210,15 +222,8 @@ def remove_outliers(X, n_sigma=4, normalize_positions=-1, no_grad=True):
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
-    if no_grad:
-        data_clean = data[:].clone()
-        data_clean[torch.logical_or(data_clean > upper, data_clean < lower)] = float('nan')
-        data_mean, data_std = torch_nanmean(data_clean, axis=0), torch_nanstd(data_clean, axis=0)
-
-    else: #TODO:David check if it does the same
-        mask = (data < upper) & (data > lower)
-        data_mean = (data * mask).sum(dim=0) / mask.sum(dim=0)
-        data_std = torch.sqrt(torch.square((data - data_mean) * mask).sum(dim=0) / (mask.sum(dim=0) - 1))
+    mask = (data <= upper) & (data >= lower) & ~torch.isnan(data)
+    data_mean, data_std = torch_masked_mean_and_std(data, mask)
 
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off
