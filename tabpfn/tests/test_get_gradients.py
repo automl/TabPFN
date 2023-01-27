@@ -1,11 +1,9 @@
 import unittest
-
-import time
 import torch
+
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from torch import nn
-
 from tabpfn import TabPFNClassifier
 
 
@@ -27,8 +25,10 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
 
         device = 'cuda:0' if torch.cuda.is_available() else 'cpu:0'
 
-        classifier = TabPFNClassifier(device=device, N_ensemble_configurations=3, no_preprocess_mode=True, no_grad=False)
-        start_time = time.time()
+        classifier = TabPFNClassifier(device=device,
+                                      N_ensemble_configurations=3,
+                                      no_preprocess_mode=True,
+                                      no_grad=False)
         for i in range(10):
             classifier.fit(X_train, y_train)
 
@@ -50,5 +50,3 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
             self.assertTrue(old_loss - current_loss > 0)
 
             old_loss = current_loss
-        print(time.time() - start_time)
-        # 10.217917203903198s
