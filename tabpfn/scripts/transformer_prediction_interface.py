@@ -306,8 +306,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                     (used_style.repeat(eval_xs.shape[1], 1) if used_style is not None else None, eval_xs, eval_ys.float()),
                     single_eval_pos=eval_position)[:, :, 0:num_classes]
 
+            output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
             if not return_logits:
-                output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
                 output = torch.nn.functional.softmax(output, dim=-1)
             #else:
             #    output[:, :, 1] = model((style.repeat(eval_xs.shape[1], 1) if style is not None else None, eval_xs, eval_ys.float()),
@@ -446,12 +446,11 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             else:
                 eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration,
                                             no_grad=no_grad)
-                eval_xs_.to(device)
             eval_xs_transformed[preprocess_transform_configuration] = eval_xs_
 
         eval_ys_ = ((eval_ys_ + class_shift_configuration) % num_classes).float()
 
-        eval_xs_ = torch.cat([eval_xs_[..., feature_shift_configuration:], eval_xs_[..., :feature_shift_configuration]], dim=-1)
+        eval_xs_ = torch.cat([eval_xs_[..., feature_shift_configuration:],eval_xs_[..., :feature_shift_configuration]],dim=-1)
 
         # Extend X
         if extend_features:
