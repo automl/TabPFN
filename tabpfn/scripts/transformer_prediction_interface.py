@@ -205,7 +205,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         if self.no_grad:
             X = check_array(X, force_all_finite=False)
             X_full = np.concatenate([self.X_, X], axis=0)
-            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1) #TODO David : remove requires_grad
+            X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
             y_full = np.concatenate([self.y_, np.zeros_like(X[:, 0])], axis=0)
             y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)
         else:
@@ -306,8 +306,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                     (used_style.repeat(eval_xs.shape[1], 1) if used_style is not None else None, eval_xs, eval_ys.float()),
                     single_eval_pos=eval_position)[:, :, 0:num_classes]
 
-            output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
             if not return_logits:
+                output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
                 output = torch.nn.functional.softmax(output, dim=-1)
             #else:
             #    output[:, :, 1] = model((style.repeat(eval_xs.shape[1], 1) if style is not None else None, eval_xs, eval_ys.float()),
@@ -368,15 +368,14 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         eval_xs = normalize_by_used_features_f(eval_xs, eval_xs.shape[-1], max_features,
                                                normalize_with_sqrt=normalize_with_sqrt)
 
-        #return eval_xs.detach().to(device) #TODO David add .detach() again
-        return eval_xs.to(device)
+        return eval_xs.detach().to(device) if no_grad else eval_xs.to(device)
 
     eval_xs, eval_ys = eval_xs.to(device), eval_ys.to(device)
     eval_ys = eval_ys[:eval_position]
 
     model.to(device)
 
-    model.eval() #TODO David check if gradients are influenced
+    model.eval()
 
     import itertools
     if not differentiable_hps_as_style:
@@ -447,7 +446,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             else:
                 eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration,
                                             no_grad=no_grad)
-                #eval_xs_.to(device) TODO: David
+                eval_xs_.to(device)
             eval_xs_transformed[preprocess_transform_configuration] = eval_xs_
 
         eval_ys_ = ((eval_ys_ + class_shift_configuration) % num_classes).float()
