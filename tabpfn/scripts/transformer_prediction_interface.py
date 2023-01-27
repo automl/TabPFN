@@ -492,16 +492,14 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         output_ = torch.cat([output_[..., class_shift_configuration:],output_[..., :class_shift_configuration]],dim=-1)
 
         #output_ = predict(eval_xs, eval_ys, style_, preprocess_transform_)
-        if not average_logits:
+        if not average_logits and not return_logits:
             # transforms every ensemble_configuration into a probability -> equal contribution of every configuration
-            output_ = torch.nn.functional.softmax(output_, dim=-1) if not return_logits \
-                else torch.nn.functional.log_softmax(output_, dim=-1)
+            output_ = torch.nn.functional.softmax(output_, dim=-1)
         output = output_ if output is None else output + output_
 
     output /= len(ensemble_configurations)
     if average_logits and not return_logits:
-        output = torch.nn.functional.softmax(output, dim=-1) if not return_logits \
-                else torch.nn.functional.log_softmax(output, dim=-1)
+        output = torch.nn.functional.softmax(output, dim=-1)
 
     output = torch.transpose(output, 0, 1)
 
