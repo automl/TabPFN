@@ -175,27 +175,26 @@ def torch_masked_mean_and_std(x, mask, axis=0):
     """
     Returns the mean and std of a torch tensor and only considers the elements, where the mask is true
     """
-    num = torch.where(~mask, torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
-    value = torch.where(~mask, torch.full_like(x, 0), x).sum(axis=axis)
+    num = torch.where(~mask, torch.full_like(x, 0), torch.full_like(x, 1)).sum(dim=axis)
+    value = torch.where(~mask, torch.full_like(x, 0), x).sum(dim=axis)
     mean = value / num
     mean_broadcast = torch.repeat_interleave(mean.unsqueeze(axis), x.shape[axis], dim=axis)
-    quadratic_difference_from_mean = torch.square(mean_broadcast - x)
-    return mean, torch.sqrt(torch.sum(torch.where(~mask, torch.full_like(quadratic_difference_from_mean, 0),
-                                        quadratic_difference_from_mean), axis=axis) / (num - 1))
+    quadratic_difference_from_mean = torch.square(torch.where(~mask, torch.full_like(x, 0), mean_broadcast - x))
+    return mean, torch.sqrt(torch.sum(quadratic_difference_from_mean, dim=axis) / (num - 1))
 
 def torch_nanmean(x, axis=0, return_nanshare=False):
-    num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
-    value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(axis=axis)
+    num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(dim=axis)
+    value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(dim=axis)
     if return_nanshare:
         return value / num, 1.-num/x.shape[axis]
     return value / num
 
 def torch_nanstd(x, axis=0):
-    num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(axis=axis)
-    value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(axis=axis)
+    num = torch.where(torch.isnan(x), torch.full_like(x, 0), torch.full_like(x, 1)).sum(dim=axis)
+    value = torch.where(torch.isnan(x), torch.full_like(x, 0), x).sum(dim=axis)
     mean = value / num
     mean_broadcast = torch.repeat_interleave(mean.unsqueeze(axis), x.shape[axis], dim=axis)
-    return torch.sqrt(torch.nansum(torch.square(mean_broadcast - x), axis=axis) / (num - 1))
+    return torch.sqrt(torch.nansum(torch.square(mean_broadcast - x), dim=axis) / (num - 1))
 
 def normalize_data(data, normalize_positions=-1):
     if normalize_positions > 0:
@@ -212,8 +211,7 @@ def normalize_data(data, normalize_positions=-1):
 def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     # Expects T, B, H
     assert len(X.shape) == 3, "X must be T,B,H"
-    #for b in range(X.shape[1]):
-        #for col in range(X.shape[2]):
+
     data = X if normalize_positions == -1 else X[:normalize_positions]
 
     data_mean, data_std = torch_nanmean(data, axis=0), torch_nanstd(data, axis=0)
