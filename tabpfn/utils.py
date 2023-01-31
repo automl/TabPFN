@@ -219,7 +219,7 @@ def remove_outliers(X, n_sigma=4, normalize_positions=-1):
     lower, upper = data_mean - cut_off, data_mean + cut_off
 
     mask = (data <= upper) & (data >= lower) & ~torch.isnan(data)
-    data_mean, data_std = torch_masked_mean_and_std(data, mask)
+    data_mean, data_std = torch_masked_mean_and_std(data, mask, axis=0)
 
     cut_off = data_std * n_sigma
     lower, upper = data_mean - cut_off, data_mean + cut_off

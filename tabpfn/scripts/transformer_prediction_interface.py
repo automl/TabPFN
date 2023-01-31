@@ -360,10 +360,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         eval_xs = eval_xs.unsqueeze(1)
 
         # TODO: Caution there is information leakage when to_ranking is used, we should not use it
-
         eval_xs = remove_outliers(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position) \
                 if not normalize_to_ranking else normalize_data(to_ranking_low_mem(eval_xs))
-
         # Rescale X
         eval_xs = normalize_by_used_features_f(eval_xs, eval_xs.shape[-1], max_features,
                                                normalize_with_sqrt=normalize_with_sqrt)
@@ -471,8 +469,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         #preprocess_transform_ = preprocess_transform if styles_configuration % 2 == 0 else 'none'
         import warnings
         with warnings.catch_warnings():
-            if no_grad:
-                warnings.filterwarnings("ignore",
+            warnings.filterwarnings("ignore",
                                     message="None of the inputs have requires_grad=True. Gradients will be None")
             warnings.filterwarnings("ignore",
                                     message="torch.cuda.amp.autocast only affects CUDA ops, but CUDA is not available.  Disabling.")
