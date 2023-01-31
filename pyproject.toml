@@ -41,7 +41,7 @@ full = [
     'xgboost>=1.4.0', # baselines
     'hyperopt>=0.2.5', # baselines
     'configspace>=0.4.21', # baselins + training + evaluation
-    'openml>=0.12.2', # evaluation + baselines
+    'openml==0.12', # evaluation + baselines
     'seaborn>=0.11-2', # evaluation
     'tqdm>=4.62.1', # training + evaluation
 ]
