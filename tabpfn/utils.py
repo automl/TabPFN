@@ -175,11 +175,11 @@ def torch_masked_mean_and_std(x, mask, axis=0):
     """
     Returns the mean and std of a torch tensor and only considers the elements, where the mask is true
     """
-    num = torch.where(~mask, torch.full_like(x, 0), torch.full_like(x, 1)).sum(dim=axis)
-    value = torch.where(~mask, torch.full_like(x, 0), x).sum(dim=axis)
+    num = torch.where(mask, torch.full_like(x, 1), torch.full_like(x, 0)).sum(dim=axis)
+    value = torch.where(mask, x, torch.full_like(x, 0)).sum(dim=axis)
     mean = value / num
     mean_broadcast = torch.repeat_interleave(mean.unsqueeze(axis), x.shape[axis], dim=axis)
-    quadratic_difference_from_mean = torch.square(torch.where(~mask, torch.full_like(x, 0), mean_broadcast - x))
+    quadratic_difference_from_mean = torch.square(torch.where(mask, mean_broadcast - x, torch.full_like(x, 0)))
     return mean, torch.sqrt(torch.sum(quadratic_difference_from_mean, dim=axis) / (num - 1))
 
 def torch_nanmean(x, axis=0, return_nanshare=False):
