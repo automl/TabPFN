@@ -207,7 +207,12 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             X_full = np.concatenate([self.X_, X], axis=0)
             X_full = torch.tensor(X_full, device=self.device).float().unsqueeze(1)
         else:
+            assert (torch.is_tensor(self.X_) & torch.is_tensor(X)), "If no_grad is false, this function expects X as " \
+                                                                    "a tensor to calculate a gradient"
             X_full = torch.cat((self.X_, X), dim=0).float().unsqueeze(1).to(self.device)
+
+            if int(torch.isnan(X_full).sum()):
+                print('X contains nans and the gradient implementation is not designed to handel nans.')
 
         y_full = np.concatenate([self.y_, np.zeros(shape=X.shape[0])], axis=0)
         y_full = torch.tensor(y_full, device=self.device).float().unsqueeze(1)

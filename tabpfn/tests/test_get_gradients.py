@@ -18,9 +18,6 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
         x_test = torch.from_numpy(x_test)
         x_test.requires_grad = True
 
-        y_train = torch.from_numpy(y_train)
-        y_test = torch.from_numpy(y_test)
-
         old_loss = 1.0
 
         device = 'cuda:0' if torch.cuda.is_available() else 'cpu:0'
@@ -34,7 +31,7 @@ class TestLoadModuleOnlyInference(unittest.TestCase):
 
             logits = classifier.predict_proba(x_test, return_logits=True)
 
-            loss = nn.CrossEntropyLoss()(logits, y_test.long().to(device))
+            loss = nn.CrossEntropyLoss()(logits, torch.from_numpy(y_test).long().to(device))
             current_loss = float(loss)
             loss.backward()
 
