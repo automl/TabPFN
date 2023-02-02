@@ -170,7 +170,9 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def fit(self, X, y, overwrite_warning=False):
         """
-        If no_grad is set to False the function takes X and y as tensors and doesn't fully check the compatibility.
+        Validates the training set and stores it.
+
+        If no_grad is set to false the function takes X as tensors and doesn't fully check the compatibility.
         Normally this function takes X and y as numpy.ndarrays
         """
         if self.no_grad:
@@ -195,6 +197,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X, normalize_with_test=False, return_logits=False):
         """
+        Predict the probabilities for the input X depending on the training set previously passed in the method fit.
+
         If no_grad is true in the classifier the function takes X as a numpy.ndarray. If no_grad is false X must be a
         torch tensor and is not fully checked.
         """
