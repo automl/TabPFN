@@ -145,6 +145,10 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.seed = seed
         self.no_grad = no_grad
 
+        assert self.no_preprocess_mode and not self.combine_preprocessing if not self.no_grad else True, \
+            "If no_grad is false, no_preprocess_mode must be true and combine_preprocessing must be false (default), " \
+            "because otherwise no gradient can be computed."
+
     def remove_models_from_memory(self):
         self.models_in_memory = {}
 
