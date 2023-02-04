@@ -106,9 +106,36 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     models_in_memory = {}
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
-                 N_ensemble_configurations=3, combine_preprocessing=False, no_preprocess_mode=False,
-                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0,
-                 no_grad=True):
+                 N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
+                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True):
+        """
+        Initializes the classifier and loads the model. 
+        Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
+        repository if no model is found.
+        
+        Can also be used to compute gradients with respect to the inputs X_train and X_test. Therefore no_grad has to be 
+        set to False and no_preprocessing_mode must be True. Furthermore, X_train and X_test need to be given as 
+        torch.Tensors and their requires_grad parameter must be set to True.
+        
+        
+        :param device: If the model should run on cuda or cpu.
+        :param base_path: Base path of the directory, from which the folders like models_diff can be accessed.
+        :param model_string: Name of the model. Used first to check if the model is already in memory, and if not, 
+               tries to load a model with that name from the models_diff directory. It looks for files named as 
+               follows: "prior_diff_real_checkpoint" + model_string + "_n_0_epoch_e.cpkt", where e can be a number 
+               between 100 and 0, and is checked in a descending order. 
+        :param N_ensemble_configurations: The number of ensemble configurations used for the prediction. Thereby the 
+               accuracy, but also the running time, increases with this number. 
+        :param no_preprocess_mode: Specifies whether preprocessing is to be performed.
+        :param multiclass_decoder: If set to permutation, randomly shifts the classes for each ensemble configuration. 
+        :param feature_shift_decoder: If set to true shifts the features for each ensemble configuration according to a 
+               random permutation.
+        :param only_inference: Indicates if the model should be loaded to only restore inference capabilities or also 
+               training capabilities. Note that the training capabilities are currently not being fully restored.
+        :param seed: Seed that is used for the prediction. Allows for a deterministic behavior of the predictions.
+        :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test. 
+               For this to correctly function no_preprocessing_mode must be set to true.
+        """
         # Model file specification (Model name, Epoch)
         i = 0
         model_key = model_string+'|'+str(device)
@@ -138,16 +165,14 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.differentiable_hps_as_style = self.c['differentiable_hps_as_style']
 
         self.no_preprocess_mode = no_preprocess_mode
-        self.combine_preprocessing = combine_preprocessing
         self.feature_shift_decoder = feature_shift_decoder
         self.multiclass_decoder = multiclass_decoder
         self.only_inference = only_inference
         self.seed = seed
         self.no_grad = no_grad
 
-        assert self.no_preprocess_mode and not self.combine_preprocessing if not self.no_grad else True, \
-            "If no_grad is false, no_preprocess_mode must be true and combine_preprocessing must be false (default), " \
-            "because otherwise no gradient can be computed."
+        assert self.no_preprocess_mode if not self.no_grad else True, \
+            "If no_grad is false, no_preprocess_mode must be true, because otherwise no gradient can be computed."
 
     def remove_models_from_memory(self):
         self.models_in_memory = {}
@@ -176,8 +201,10 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         """
         Validates the training set and stores it.
 
-        If no_grad is set to false the function takes X as tensors and doesn't fully check the compatibility.
-        Normally this function takes X and y as numpy.ndarrays
+        If clf.no_grad (default is True):
+        X, y should be of type np.array
+        else:
+        X should be of type torch.Tensors (y can be np.array or torch.Tensor)
         """
         if self.no_grad:
             # Check that X and y have correct shape
@@ -235,7 +262,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          normalize_with_test=normalize_with_test,
                                          N_ensemble_configurations=self.N_ensemble_configurations,
                                          softmax_temperature=self.temperature,
-                                         combine_preprocessing=self.combine_preprocessing,
                                          multiclass_decoder=self.multiclass_decoder,
                                          feature_shift_decoder=self.feature_shift_decoder,
                                          differentiable_hps_as_style=self.differentiable_hps_as_style,
@@ -271,7 +297,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         categorical_feats=[],
                         feature_shift_decoder=False,
                         N_ensemble_configurations=10,
-                        combine_preprocessing=False,
                         batch_size_inference=16,
                         differentiable_hps_as_style=False,
                         average_logits=True,
@@ -333,7 +358,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
         return output
 
-    def preprocess_input(eval_xs, preprocess_transform, no_grad=True):
+    def preprocess_input(eval_xs, preprocess_transform):
         import warnings
 
         if eval_xs.shape[1] > 1:
@@ -379,7 +404,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         eval_xs = normalize_by_used_features_f(eval_xs, eval_xs.shape[-1], max_features,
                                                normalize_with_sqrt=normalize_with_sqrt)
 
-        return eval_xs.detach().to(device) if no_grad else eval_xs.to(device)
+        return eval_xs.to(device)
 
     eval_xs, eval_ys = eval_xs.to(device), eval_ys.to(device)
     eval_ys = eval_ys[:eval_position]
@@ -446,17 +471,9 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         if preprocess_transform_configuration in eval_xs_transformed:
             eval_xs_ = eval_xs_transformed[preprocess_transform_configuration].clone()
         else:
-            if eval_xs_.shape[-1] * 3 < max_features and combine_preprocessing:
-                eval_xs_ = torch.cat([preprocess_input(eval_xs_, preprocess_transform='power_all'),
-                            preprocess_input(eval_xs_, preprocess_transform='quantile_all')], -1)
-                eval_xs_ = normalize_data(eval_xs_, normalize_positions=-1 if normalize_with_test else eval_position)
-                #eval_xs_ = torch.stack([preprocess_input(eval_xs_, preprocess_transform='power_all'),
-                #                        preprocess_input(eval_xs_, preprocess_transform='robust_all'),
-                #                        preprocess_input(eval_xs_, preprocess_transform='none')], -1)
-                #eval_xs_ = torch.flatten(torch.swapaxes(eval_xs_, -2, -1), -2)
-            else:
-                eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration,
-                                            no_grad=no_grad)
+            eval_xs_ = preprocess_input(eval_xs_, preprocess_transform=preprocess_transform_configuration)
+            if no_grad:
+                eval_xs_ = eval_xs_.detach()
             eval_xs_transformed[preprocess_transform_configuration] = eval_xs_
 
         eval_ys_ = ((eval_ys_ + class_shift_configuration) % num_classes).float()
@@ -506,7 +523,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             output_ = torch.nn.functional.softmax(output_, dim=-1)
         output = output_ if output is None else output + output_
 
-    output /= len(ensemble_configurations)
+    output = output / len(ensemble_configurations)
     if average_logits and not return_logits:
         output = torch.nn.functional.softmax(output, dim=-1)
 
