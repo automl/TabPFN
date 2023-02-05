@@ -15,6 +15,7 @@ from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
+from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
 from tabpfn.scripts.model_builder import load_model, load_model_only_inference
 import os
@@ -171,6 +172,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         X, y = check_X_y(X, y, force_all_finite=False)
         # Store the classes seen during fit
         y = self._validate_targets(y)
+        self.label_encoder = LabelEncoder()
+        y = self.label_encoder.fit_transform(y)
 
         self.X_ = X
         self.y_ = y
