@@ -217,7 +217,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          feature_shift_decoder=self.feature_shift_decoder,
                                          differentiable_hps_as_style=self.differentiable_hps_as_style,
                                          seed=self.seed,
-                                         batch_size_inference=self.batch_size_inference
+                                         batch_size_inference=self.batch_size_inference,
                                          **get_params_from_config(self.c))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
