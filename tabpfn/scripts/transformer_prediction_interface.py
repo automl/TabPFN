@@ -108,7 +108,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, combine_preprocessing=False, no_preprocess_mode=False,
-                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0):
+                 multiclass_decoder='permutation', feature_shift_decoder=True, only_inference=True, seed=0,
+                 batch_size_inference=32):
         # Model file specification (Model name, Epoch)
         i = 0
         model_key = model_string+'|'+str(device)
@@ -143,6 +144,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.multiclass_decoder = multiclass_decoder
         self.only_inference = only_inference
         self.seed = seed
+        self.batch_size_inference = batch_size_inference
 
     def remove_models_from_memory(self):
         self.models_in_memory = {}
@@ -215,6 +217,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          feature_shift_decoder=self.feature_shift_decoder,
                                          differentiable_hps_as_style=self.differentiable_hps_as_style,
                                          seed=self.seed,
+                                         batch_size_inference=self.batch_size_inference,
                                          **get_params_from_config(self.c))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
