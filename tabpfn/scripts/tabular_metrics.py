@@ -111,7 +111,7 @@ def neg_r2(target, pred):
     return -r2_score(pred.float(), target.float())
 
 def is_classification(metric_used):
-    if metric_used == auc_metric or metric_used == cross_entropy:
+    if metric_used.__name__ in ["auc_metric", "cross_entropy"]:
         return True
     return False
 

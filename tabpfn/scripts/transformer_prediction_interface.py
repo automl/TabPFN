@@ -15,6 +15,7 @@ from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
+from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
 from tabpfn.scripts.model_builder import load_model, load_model_only_inference
 import os
@@ -107,7 +108,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
-                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True):
+                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32):
         """
         Initializes the classifier and loads the model. 
         Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
@@ -133,9 +134,13 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         :param only_inference: Indicates if the model should be loaded to only restore inference capabilities or also 
                training capabilities. Note that the training capabilities are currently not being fully restored.
         :param seed: Seed that is used for the prediction. Allows for a deterministic behavior of the predictions.
+        :param batch_size_inference: This parameter is a trade-off between performance and memory consumption.
+               The computation done with different values for batch_size_inference is the same,
+               but it is split into smaller/larger batches.
         :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test. 
                For this to correctly function no_preprocessing_mode must be set to true.
         """
+
         # Model file specification (Model name, Epoch)
         i = 0
         model_key = model_string+'|'+str(device)
@@ -174,6 +179,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         assert self.no_preprocess_mode if not self.no_grad else True, \
             "If no_grad is false, no_preprocess_mode must be true, because otherwise no gradient can be computed."
 
+        self.batch_size_inference = batch_size_inference
+
     def remove_models_from_memory(self):
         self.models_in_memory = {}
 
@@ -211,6 +218,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             X, y = check_X_y(X, y, force_all_finite=False)
         # Store the classes seen during fit
         y = self._validate_targets(y)
+        self.label_encoder = LabelEncoder()
+        y = self.label_encoder.fit_transform(y)
 
         self.X_ = X
         self.y_ = y
@@ -268,6 +277,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          seed=self.seed,
                                          return_logits=return_logits,
                                          no_grad=self.no_grad,
+                                         batch_size_inference=self.batch_size_inference,
                                          **get_params_from_config(self.c))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
