@@ -274,7 +274,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
     elif config['max_num_classes'] > 2:
         loss = Losses.ce(config['max_num_classes'])
 
-    aggregate_k_gradients = 1 if 'aggregate_k_gradients' not in config else config['aggregate_k_gradients']
+
     check_is_compatible = False if 'multiclass_loss_type' not in config else (config['multiclass_loss_type'] == 'compatible')
     config['multiclass_type'] = config['multiclass_type'] if 'multiclass_type' in config else 'rank'
     config['mix_activations'] = config['mix_activations'] if 'mix_activations' in config else False
@@ -304,7 +304,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
                   , steps_per_epoch=config['num_steps']
                   , single_eval_pos_gen=get_uniform_single_eval_pos_sampler(config.get('max_eval_pos', config['bptt']), min_len=config.get('min_eval_pos', 0))
                   , load_weights_from_this_state_dict=state_dict
-                  , aggregate_k_gradients=aggregate_k_gradients
+                  , aggregate_k_gradients=config['aggregate_k_gradients']
                   , recompute_attn=config['recompute_attn']
                   , epoch_callback=epoch_callback
                   , bptt_extra_samples = config['bptt_extra_samples']
