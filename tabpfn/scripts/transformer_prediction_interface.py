@@ -144,7 +144,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         # Model file specification (Model name, Epoch)
         i = 0
         model_key = model_string+'|'+str(device)
-        if model_string in self.models_in_memory:
+        if model_key in self.models_in_memory:
             model, c, results_file = self.models_in_memory[model_key]
         else:
             model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
