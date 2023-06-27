@@ -60,15 +60,13 @@ Here, we list some tips and tricks that might help you understand how to use it 
 Read our [paper](https://arxiv.org/abs/2207.01848) for more information about the setup (or contact us ☺️).
 If you use our method, please cite us using
 ```
-@misc{tabpfn,
-  doi = {10.48550/ARXIV.2207.01848},
-  url = {https://arxiv.org/abs/2207.01848},
-  author = {Hollmann, Noah and Müller, Samuel and Eggensperger, Katharina and Hutter, Frank},
-  keywords = {Machine Learning (cs.LG), Machine Learning (stat.ML), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  title = {TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second},
-  publisher = {arXiv},
-  year = {2022},
-  copyright = {arXiv.org perpetual, non-exclusive license}
+@inproceedings{
+  hollmann2023tabpfn,
+  title={Tab{PFN}: A Transformer That Solves Small Tabular Classification Problems in a Second},
+  author={Noah Hollmann and Samuel M{\"u}ller and Katharina Eggensperger and Frank Hutter},
+  booktitle={The Eleventh International Conference on Learning Representations},
+  year={2023},
+  url={https://openreview.net/forum?id=cp5PvcI6w8_}
 }
 ```
 
