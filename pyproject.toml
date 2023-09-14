@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tabpfn"
-version = "0.1.8"
+version = "0.1.9"
 authors = [
 {name="Noah Hollmann"},
 {name="Samuel Muller", email="muellesa@tf.uni-freiburg.de"},

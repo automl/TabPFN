@@ -108,7 +108,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
-                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32):
+                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
+                 subsample_features=False):
         """
         Initializes the classifier and loads the model. 
         Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
@@ -139,6 +140,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                but it is split into smaller/larger batches.
         :param no_grad: If set to false, allows for the computation of gradients with respect to X_train and X_test. 
                For this to correctly function no_preprocessing_mode must be set to true.
+        :param subsample_features: If set to true and the number of features in the dataset exceeds self.max_features (100),
+                the features are subsampled to self.max_features.
         """
 
         # Model file specification (Model name, Epoch)
@@ -175,6 +178,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.only_inference = only_inference
         self.seed = seed
         self.no_grad = no_grad
+        self.subsample_features = subsample_features
 
         assert self.no_preprocess_mode if not self.no_grad else True, \
             "If no_grad is false, no_preprocess_mode must be true, because otherwise no gradient can be computed."
@@ -224,8 +228,11 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.X_ = X
         self.y_ = y
 
-        if X.shape[1] > self.max_num_features:
-            raise ValueError("The number of features for this classifier is restricted to ", self.max_num_features)
+        if (X.shape[1] > self.max_num_features):
+            if self.subsample_features:
+                print('WARNING: The number of features for this classifier is restricted to ', self.max_num_features, ' and will be subsampled.')
+            else:
+                raise ValueError("The number of features for this classifier is restricted to ", self.max_num_features)
         if len(np.unique(y)) > self.max_num_classes:
             raise ValueError("The number of classes for this classifier is restricted to ", self.max_num_classes)
         if X.shape[0] > 1024 and not overwrite_warning:
@@ -373,6 +380,10 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
         if eval_xs.shape[1] > 1:
             raise Exception("Transforms only allow one batch dim - TODO")
+
+        if eval_xs.shape[2] > max_features:
+            eval_xs = eval_xs[:, :, sorted(np.random.choice(eval_xs.shape[2], max_features, replace=False))]
+
         if preprocess_transform != 'none':
             if preprocess_transform == 'power' or preprocess_transform == 'power_all':
                 pt = PowerTransformer(standardize=True)

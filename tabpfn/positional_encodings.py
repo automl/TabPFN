@@ -15,7 +15,7 @@ class NoPositionalEncoding(nn.Module):
         pass
 
     def forward(self, x):
-        return x #* math.sqrt(x.shape[-1])
+        return x
 
 
 class PositionalEncoding(nn.Module):
