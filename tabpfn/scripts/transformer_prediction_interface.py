@@ -76,7 +76,7 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
 
     model_file = None
     if e == -1:
-        for e_ in range(100, -1, -1):
+        for e_ in [42] + list(range(100, -1, -1)):
             model_file_, model_path_, results_file_ = check_file(e_)
             if model_file_ is not None:
                 e = e_
